@@ -224,28 +224,28 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="I agree to the "
+                    android:text="@string/i_agree_to_the"
                     android:textColor="@color/grey"
                     android:textSize="14sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Terms of Service"
+                    android:text="@string/terms_of_service"
                     android:textColor="@color/app_primary_blue"
                     android:textSize="14sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text=" and "
+                    android:text="@string/and"
                     android:textColor="@color/grey"
                     android:textSize="14sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Privacy Policy"
+                    android:text="@string/privacy_policy"
                     android:textColor="@color/app_primary_blue"
                     android:textSize="14sp" />
             </LinearLayout>
@@ -337,7 +337,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Already have an account? "
+                android:text="@string/already_have_an_account"
                 android:textColor="@color/grey"
                 android:textSize="14sp" />
 
@@ -345,7 +345,7 @@
                 android:id="@+id/login_action_text_view"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Log in"
+                android:text="@string/log_in"
                 android:textColor="@color/app_primary_blue"
                 android:textSize="14sp"
                 android:textStyle="bold" />
