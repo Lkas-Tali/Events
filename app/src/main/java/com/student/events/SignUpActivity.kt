@@ -34,8 +34,8 @@ class SignUpActivity : AppCompatActivity() {
             validateAndSignUp()
         }
 
-        // Listener for the login text to navigate to the LoginActivity
-        binding.loginTextView.setOnClickListener {
+        // Listener for the login layout to navigate to the LoginActivity
+        binding.loginLayout.setOnClickListener {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
         }
@@ -115,7 +115,7 @@ class SignUpActivity : AppCompatActivity() {
             binding.progressBar.visibility = View.VISIBLE
             binding.signupButton.isEnabled = false
         } else {
-            binding.signupButton.text = getString(R.string.create_account_button)
+            binding.signupButton.setText(R.string.create_account)
             binding.progressBar.visibility = View.GONE
             binding.signupButton.isEnabled = true
         }

@@ -80,11 +80,9 @@ class LoginActivity : AppCompatActivity() {
 
         // Set up the click listener for the "Sign up" layout.
         signupLayout.setOnClickListener {
-            // We will create an Intent to navigate to the SignUpActivity.
-            // (You will need to create this activity and its layout later).
-            // val intent = Intent(this, SignUpActivity::class.java)
-            // startActivity(intent)
-            Toast.makeText(this, "Sign Up screen not implemented yet.", Toast.LENGTH_SHORT).show()
+            // Create an Intent to navigate to the SignUpActivity.
+            val intent = Intent(this, SignUpActivity::class.java)
+            startActivity(intent)
         }
     }
 

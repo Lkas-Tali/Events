@@ -1,4 +1,23 @@
 <resources>
     <string name="app_name">Events</string>
     <string name="create_account_button">Create Account</string>
+    <string name="or">or</string>
+    <string name="already_have_an_account_log_in">Already have an account? Log in</string>
+    <string name="create_account">Create Account</string>
+    <string name="i_agree_to_the_terms_of_service_and_privacy_policy">I agree to the Terms of Service and Privacy Policy</string>
+    <string name="confirm_your_password">Confirm your password</string>
+    <string name="join_us_to_start_managing_your_events">Join us to start managing your events</string>
+    <string name="full_name">Full Name</string>
+    <string name="john_doe">John Doe</string>
+    <string name="email_address">Email Address</string>
+    <string name="your_email_com">your@email.com</string>
+    <string name="password">Password</string>
+    <string name="create_a_strong_password">Create a strong password</string>
+    <string name="confirm_password">Confirm Password</string>
+    <string name="app_logo">App Logo</string>
+    <string name="welcome_back">Welcome Back</string>
+    <string name="log_in_to_manage_your_events">Log in to manage your events</string>
+    <string name="remember_me">Remember me</string>
+    <string name="forgot_password">Forgot password?</string>
+    <string name="log_in">Log In</string>
 </resources>

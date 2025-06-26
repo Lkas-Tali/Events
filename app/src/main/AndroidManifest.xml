@@ -34,7 +34,10 @@
             android:name=".MainActivity"
             android:exported="false" />
 
-        <!-- You will add other activities like SignUpActivity, ForgotPasswordActivity here -->
+        <!-- Declaration for SignUpActivity to prevent app crash -->
+        <activity
+            android:name=".SignUpActivity"
+            android:exported="false" />
 
     </application>
 
