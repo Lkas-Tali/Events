@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Events</string>
+    <string name="create_account_button">Create Account</string>
 </resources>

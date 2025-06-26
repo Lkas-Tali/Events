@@ -4,4 +4,7 @@
     <color name="white">#FFFFFFFF</color>
 
     <color name="app_primary_blue">#0d47a1</color>
+    <color name="grey">#6B7280</color>
+    <color name="light_grey">#E5E7EB</color>
+    <color name="app_primary_dark_blue">#000000</color>
 </resources>
