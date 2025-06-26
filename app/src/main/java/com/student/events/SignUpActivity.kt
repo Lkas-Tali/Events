@@ -7,6 +7,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 import com.student.events.databinding.ActivitySignUpBinding
 
 class SignUpActivity : AppCompatActivity() {
@@ -83,28 +84,70 @@ class SignUpActivity : AppCompatActivity() {
         }
 
         // If all validations pass, create the account
-        createFirebaseAccount(email, password)
+        createFirebaseAccount(email, password, fullName)
     }
 
     /**
-     * Uses Firebase Auth to create a new user with email and password.
+     * Data class to represent a User object in the database.
      */
-    private fun createFirebaseAccount(email: String, password: String) {
+    data class User(
+        val fullName: String = "",
+        val email: String = "",
+        val about: String = "",
+        val profileImageUrl: String = ""
+    )
+
+    /**
+     * Uses Firebase Auth to create a new user and then saves their details to the Realtime Database.
+     */
+    private fun createFirebaseAccount(email: String, password: String, fullName: String) {
         setLoading(true)
         auth.createUserWithEmailAndPassword(email, password)
             .addOnCompleteListener(this) { task ->
-                setLoading(false)
                 if (task.isSuccessful) {
-                    // Sign up success, navigate to the main activity
-                    Toast.makeText(this, "Account created successfully!", Toast.LENGTH_SHORT).show()
-                    startActivity(Intent(this, MainActivity::class.java))
-                    finishAffinity() // Closes all previous activities
+                    // Authentication successful, now save user data to Realtime Database
+                    val firebaseUser = auth.currentUser
+                    val uid = firebaseUser?.uid
+
+                    if (uid != null) {
+                        // Get a reference to the "users" node in your Realtime Database
+                        val databaseReference = FirebaseDatabase.getInstance().getReference("users")
+
+                        // Create a User object with the provided details
+                        val user = User(
+                            fullName = fullName,
+                            email = email,
+                            // You can add default values for other fields
+                            about = "Welcome to my profile!",
+                            profileImageUrl = ""
+                        )
+
+                        // Save the user object to the database under their unique UID
+                        databaseReference.child(uid).setValue(user)
+                            .addOnCompleteListener { dbTask ->
+                                setLoading(false)
+                                if (dbTask.isSuccessful) {
+                                    // Data saved successfully!
+                                    Toast.makeText(this, "Account created successfully!", Toast.LENGTH_SHORT).show()
+                                    startActivity(Intent(this, MainActivity::class.java))
+                                    finishAffinity() // Closes all previous activities
+                                } else {
+                                    // Failed to save data
+                                    Toast.makeText(baseContext, "Failed to save user data: ${dbTask.exception?.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                    } else {
+                        setLoading(false)
+                        Toast.makeText(baseContext, "Failed to get user ID.", Toast.LENGTH_SHORT).show()
+                    }
                 } else {
                     // If sign up fails, display a message to the user.
-                    Toast.makeText(baseContext, "Authentication failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                    setLoading(false)
+                    Toast.makeText(baseContext, "Authentication failed: ${task.exception?.message}", Toast.LENGTH_LONG).show()
                 }
             }
     }
+
 
     /**
      * Manages the loading state of the sign up button and progress bar

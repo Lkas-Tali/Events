@@ -7,4 +7,14 @@
     <color name="grey">#6B7280</color>
     <color name="light_grey">#E5E7EB</color>
     <color name="app_primary_dark_blue">#000000</color>
+
+    <!-- Event action button colors -->
+    <color name="danger_text">#991B1B</color>
+    <color name="tertiary_text">#3730A3</color>
+
+    <!-- Notification colors -->
+    <color name="notification_unread_bg">#F3F4F6</color>
+    <color name="notification_invite_color">#3B82F6</color>
+    <color name="notification_update_color">#D97706</color>
+    <color name="notification_rsvp_color">#059669</color>
 </resources>
