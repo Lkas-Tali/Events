@@ -219,16 +219,17 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal">
 
+                    <!-- FIX: Updated Cancel button styling -->
                     <Button
                         android:id="@+id/cancelButton"
                         android:layout_width="0dp"
                         android:layout_height="48dp"
                         android:layout_marginEnd="8dp"
                         android:layout_weight="1"
-                        android:background="@drawable/cancel_button_bg"
                         android:text="Cancel"
                         android:textAllCaps="false"
-                        android:textColor="#374151"
+                        android:textColor="@color/app_primary_blue"
+                        app:backgroundTint="@color/app_secondary_bg"
                         android:textSize="16sp" />
 
                     <FrameLayout
@@ -237,13 +238,14 @@
                         android:layout_marginStart="8dp"
                         android:layout_weight="1">
 
+                        <!-- FIX: Updated Create Event button styling -->
                         <Button
                             android:id="@+id/createButton"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
-                            android:background="@drawable/primary_action_bg"
                             android:text="Create Event"
                             android:textAllCaps="false"
+                            app:backgroundTint="@color/app_primary_blue"
                             android:textColor="@android:color/white"
                             android:textSize="16sp"
                             android:textStyle="bold" />

@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.tabs.TabLayout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
+import com.google.firebase.storage.FirebaseStorage
 import com.student.events.adapters.EventsAdapter
 import com.student.events.databinding.ActivityMainBinding
 import com.student.events.models.Event
@@ -33,13 +34,11 @@ class MainActivity : AppCompatActivity() {
     private val attendingEvents = mutableListOf<Event>()
     private val notifications = mutableListOf<Notification>()
 
-    // --- FIX: Pagination variables restored ---
     private val displayedEvents = mutableListOf<Event>()
     private var currentDisplayedCount = 0
     private val EVENTS_PER_PAGE = 4
     private var isLoading = false
     private var hasMoreEvents = true
-    // --- End of Fix ---
 
     private var currentUserId: String? = null
     private var currentTab = "discover"
@@ -77,7 +76,6 @@ class MainActivity : AppCompatActivity() {
             binding.userEmailText.text = user.email
         }
 
-        // --- FIX: Adapter now uses the displayedEvents list for pagination ---
         eventsAdapter = EventsAdapter(
             events = displayedEvents,
             currentUserId = currentUserId ?: "",
@@ -95,17 +93,14 @@ class MainActivity : AppCompatActivity() {
             isNestedScrollingEnabled = false
         }
 
-        // --- FIX: Scroll listener now correctly references the binding property ---
         binding.nestedScrollView.setOnScrollChangeListener(NestedScrollView.OnScrollChangeListener { v, _, scrollY, _, oldScrollY ->
             if (v.getChildAt(v.childCount - 1) != null) {
                 if ((scrollY >= (v.getChildAt(v.childCount - 1).measuredHeight - v.measuredHeight)) &&
                     scrollY > oldScrollY) {
-                    // Scrolled to bottom
                     loadMoreEvents()
                 }
             }
         })
-        // --- End of Fix ---
 
         binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
@@ -213,7 +208,6 @@ class MainActivity : AppCompatActivity() {
             })
     }
 
-    // --- FIX: Pagination logic functions are restored ---
     private fun resetAndLoadEvents() {
         displayedEvents.clear()
         currentDisplayedCount = 0
@@ -254,7 +248,6 @@ class MainActivity : AppCompatActivity() {
         binding.loadingMoreLayout.visibility = if (hasMoreEvents) View.VISIBLE else View.GONE
         isLoading = false
     }
-    // --- End of Fix ---
 
     private fun sortEventsByDate(events: MutableList<Event>) {
         events.sortBy { it.dateTime?.seconds ?: Long.MAX_VALUE }
@@ -393,10 +386,35 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    // --- FIX: This function now also deletes the image from Firebase Storage ---
     private fun deleteEvent(event: Event) {
-        database.reference.child("events").child(event.id).removeValue()
-            .addOnSuccessListener { Toast.makeText(this, "Event deleted successfully", Toast.LENGTH_SHORT).show() }
-            .addOnFailureListener { Toast.makeText(this, "Failed to delete event", Toast.LENGTH_SHORT).show() }
+        // First, check if there is an image URL.
+        if (!event.imageUrl.isNullOrEmpty()) {
+            // Get a reference to the image file from the URL.
+            val photoRef = FirebaseStorage.getInstance().getReferenceFromUrl(event.imageUrl)
+
+            // Delete the file from Storage.
+            photoRef.delete().addOnSuccessListener {
+                // If the image is deleted successfully, then delete the event from the database.
+                deleteEventFromDatabase(event.id)
+            }.addOnFailureListener {
+                // If image deletion fails, show an error and DON'T delete the database entry.
+                Toast.makeText(this, "Failed to delete event image. Please try again.", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            // If there's no image, just delete the event from the database directly.
+            deleteEventFromDatabase(event.id)
+        }
+    }
+
+    private fun deleteEventFromDatabase(eventId: String) {
+        database.reference.child("events").child(eventId).removeValue()
+            .addOnSuccessListener {
+                Toast.makeText(this, "Event deleted successfully", Toast.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Failed to delete event data", Toast.LENGTH_SHORT).show()
+            }
     }
 
     private fun cancelRsvp(event: Event) {

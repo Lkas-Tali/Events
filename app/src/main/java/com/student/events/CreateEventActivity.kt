@@ -4,16 +4,20 @@ import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
-import android.util.Base64
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
+import com.google.firebase.storage.FirebaseStorage
 import com.student.events.databinding.ActivityCreateEventBinding
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
@@ -24,6 +28,7 @@ class CreateEventActivity : AppCompatActivity() {
     private lateinit var binding: ActivityCreateEventBinding
     private lateinit var auth: FirebaseAuth
     private lateinit var database: FirebaseDatabase
+    private lateinit var storage: FirebaseStorage
 
     private var selectedImageUri: Uri? = null
     private var selectedDate: String = ""
@@ -41,6 +46,7 @@ class CreateEventActivity : AppCompatActivity() {
 
         auth = FirebaseAuth.getInstance()
         database = FirebaseDatabase.getInstance()
+        storage = FirebaseStorage.getInstance()
 
         isEditMode = intent.getBooleanExtra("editMode", false)
         if (isEditMode) {
@@ -84,12 +90,121 @@ class CreateEventActivity : AppCompatActivity() {
         binding.cancelButton.setOnClickListener { finish() }
         binding.createButton.setOnClickListener {
             if (validateInputs()) {
-                if (isEditMode) {
-                    updateEvent()
-                } else {
-                    createEvent()
-                }
+                handleEventCreationOrUpdate()
             }
+        }
+    }
+
+    private fun handleEventCreationOrUpdate() {
+        setLoading(true)
+        if (selectedImageUri != null) {
+            uploadImageThenSaveEvent()
+        } else {
+            saveEventToDatabase(existingImageUrl)
+        }
+    }
+
+    private fun uploadImageThenSaveEvent() {
+        try {
+            val storageRef = storage.reference.child("event_images/${UUID.randomUUID()}.jpg")
+            val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, selectedImageUri)
+            val baos = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+            val data = baos.toByteArray()
+
+            storageRef.putBytes(data)
+                .addOnSuccessListener {
+                    storageRef.downloadUrl.addOnSuccessListener { uri ->
+                        saveEventToDatabase(uri.toString())
+                    }.addOnFailureListener {
+                        setLoading(false)
+                        Toast.makeText(this, "Failed to get image URL.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .addOnFailureListener { e ->
+                    setLoading(false)
+                    Toast.makeText(this, "Image upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+
+        } catch (e: Exception) {
+            setLoading(false)
+            Toast.makeText(this, "Failed to process image.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun saveEventToDatabase(imageUrl: String?) {
+        val title = binding.titleInput.text.toString().trim()
+        val location = binding.locationInput.text.toString().trim()
+        val description = binding.descriptionInput.text.toString().trim()
+
+        if (isEditMode) {
+            // Update existing event
+            eventId?.let { id ->
+                val updates = hashMapOf<String, Any?>(
+                    "title" to title,
+                    "location" to location,
+                    "description" to description,
+                    "dateTime" to getCombinedDateTime(),
+                    "imageUrl" to imageUrl
+                )
+                database.reference.child("events").child(id).updateChildren(updates)
+                    .addOnSuccessListener {
+                        setLoading(false)
+                        setResult(Activity.RESULT_OK)
+                        finish()
+                    }
+                    .addOnFailureListener { e ->
+                        setLoading(false)
+                        Toast.makeText(this, "Failed to update event: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+            }
+        } else {
+            // Create new event
+            val user = auth.currentUser ?: return
+            val userId = user.uid
+
+            // --- FIX STARTS HERE ---
+            // Fetch the user's full name from the Realtime Database before creating the event.
+            database.reference.child("users").child(userId).addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val userName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown"
+                    val userPhotoUrl = user.photoUrl?.toString() ?: ""
+
+                    val creatorAsAttendee = mapOf(
+                        "fullName" to userName,
+                        "profileImageUrl" to userPhotoUrl
+                    )
+
+                    val event = hashMapOf(
+                        "title" to title,
+                        "location" to location,
+                        "description" to description,
+                        "imageUrl" to (imageUrl ?: ""),
+                        "organizer" to mapOf("uid" to userId, "fullName" to userName),
+                        "attendees" to mapOf(userId to creatorAsAttendee),
+                        "attendeesCount" to 1,
+                        "status" to "upcoming",
+                        "dateTime" to getCombinedDateTime()
+                    )
+
+                    database.reference.child("events").push().setValue(event)
+                        .addOnSuccessListener {
+                            setLoading(false)
+                            setResult(Activity.RESULT_OK)
+                            finish()
+                        }
+                        .addOnFailureListener { e ->
+                            setLoading(false)
+                            Toast.makeText(this@CreateEventActivity, "Failed to create event: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    setLoading(false)
+                    Toast.makeText(this@CreateEventActivity, "Failed to get user details: ${error.message}", Toast.LENGTH_SHORT).show()
+                }
+            })
+            // --- FIX ENDS HERE ---
         }
     }
 
@@ -155,7 +270,6 @@ class CreateEventActivity : AppCompatActivity() {
     }
 
     private fun validateInputs(): Boolean {
-        // (Input validation remains the same)
         val title = binding.titleInput.text.toString().trim()
         val location = binding.locationInput.text.toString().trim()
         val description = binding.descriptionInput.text.toString().trim()
@@ -185,58 +299,6 @@ class CreateEventActivity : AppCompatActivity() {
         return true
     }
 
-    // --- FIX STARTS HERE ---
-    // The following functions `createEvent`, `updateEvent`, `saveEventToDatabase`,
-    // and `updateEventInDatabase` have been updated to save the data in the correct
-    // structure that matches your `Event.kt` model. This prevents data corruption.
-
-    private fun createEvent() {
-        setLoading(true)
-        val title = binding.titleInput.text.toString().trim()
-        val location = binding.locationInput.text.toString().trim()
-        val description = binding.descriptionInput.text.toString().trim()
-        val userId = auth.currentUser?.uid ?: return
-        val userName = auth.currentUser?.displayName ?: "Unknown"
-
-        if (selectedImageUri != null) {
-            uploadImageAndSaveEvent(title, location, description, userId, userName)
-        } else {
-            saveEventToDatabase(title, location, description, userId, userName, null)
-        }
-    }
-
-    private fun updateEvent() {
-        setLoading(true)
-        val title = binding.titleInput.text.toString().trim()
-        val location = binding.locationInput.text.toString().trim()
-        val description = binding.descriptionInput.text.toString().trim()
-
-        if (selectedImageUri != null) {
-            uploadImageAndSaveEvent(title, location, description, null, null, isUpdate = true)
-        } else {
-            updateEventInDatabase(title, location, description, existingImageUrl)
-        }
-    }
-
-    private fun uploadImageAndSaveEvent(title: String, location: String, description: String, userId: String?, userName: String?, isUpdate: Boolean = false) {
-        try {
-            val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, selectedImageUri)
-            val outputStream = ByteArrayOutputStream()
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, outputStream)
-            val imageBytes = outputStream.toByteArray()
-            val base64Image = "data:image/jpeg;base64," + Base64.encodeToString(imageBytes, Base64.DEFAULT)
-
-            if (isUpdate) {
-                updateEventInDatabase(title, location, description, base64Image)
-            } else {
-                saveEventToDatabase(title, location, description, userId!!, userName!!, base64Image)
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Failed to process image", Toast.LENGTH_SHORT).show()
-            setLoading(false)
-        }
-    }
-
     private fun getCombinedDateTime(): Map<String, Long>? {
         return try {
             val format = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
@@ -246,59 +308,6 @@ class CreateEventActivity : AppCompatActivity() {
             null
         }
     }
-
-    private fun saveEventToDatabase(title: String, location: String, description: String, userId: String, userName: String, imageUrl: String?) {
-        val event = hashMapOf(
-            "title" to title,
-            "location" to location,
-            "description" to description,
-            "imageUrl" to (imageUrl ?: ""),
-            "organizer" to mapOf("uid" to userId, "fullName" to userName),
-            "attendees" to mapOf<String, Any>(),
-            "attendeesCount" to 0,
-            "status" to "upcoming",
-            "dateTime" to getCombinedDateTime()
-        )
-
-        database.reference.child("events").push().setValue(event)
-            .addOnSuccessListener {
-                setLoading(false)
-                setResult(Activity.RESULT_OK)
-                finish()
-            }
-            .addOnFailureListener { e ->
-                setLoading(false)
-                Toast.makeText(this, "Failed to create event: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-    }
-
-    private fun updateEventInDatabase(title: String, location: String, description: String, imageUrl: String?) {
-        eventId?.let { id ->
-            val updates = hashMapOf<String, Any?>(
-                "title" to title,
-                "location" to location,
-                "description" to description,
-                "dateTime" to getCombinedDateTime()
-            )
-
-            imageUrl?.let {
-                updates["imageUrl"] = it
-            }
-
-            database.reference.child("events").child(id).updateChildren(updates)
-                .addOnSuccessListener {
-                    setLoading(false)
-                    setResult(Activity.RESULT_OK)
-                    finish()
-                }
-                .addOnFailureListener { e ->
-                    setLoading(false)
-                    Toast.makeText(this, "Failed to update event: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-        }
-    }
-
-    // --- FIX ENDS HERE ---
 
     private fun setLoading(isLoading: Boolean) {
         if (isLoading) {
