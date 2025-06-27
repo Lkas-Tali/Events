@@ -13,6 +13,8 @@
     <color name="app_background">#f8f9fa</color>
     <color name="app_card_background">#FFFFFF</color>
     <color name="app_placeholder_background">#F3F4F6</color>
+    <color name="scrim_background">#99000000</color> <!-- ADD THIS LINE -->
+
 
     <!-- Text colors -->
     <color name="app_text_primary">#1F2937</color>

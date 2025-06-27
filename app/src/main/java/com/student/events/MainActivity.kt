@@ -5,17 +5,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Rect
-import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.renderscript.Allocation
-import android.renderscript.Element
-import android.renderscript.RenderScript
-import android.renderscript.ScriptIntrinsicBlur
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -26,10 +16,13 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.core.widget.NestedScrollView
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.google.android.material.tabs.TabLayout
 import com.google.firebase.auth.FirebaseAuth
@@ -41,7 +34,6 @@ import com.student.events.models.Event
 import com.student.events.models.Notification
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
 
@@ -75,6 +67,17 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Enable edge-to-edge display
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // ADD: Programmatically control the system bar appearance
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        // This tells the system that the content behind the status bar is light, so icons should be dark
+        insetsController.isAppearanceLightStatusBars = true
+        // This tells the system that the content behind the navigation bar is light, so the handle should be dark
+        insetsController.isAppearanceLightNavigationBars = true
+
+
         auth = FirebaseAuth.getInstance()
         database = FirebaseDatabase.getInstance()
         currentUserId = auth.currentUser?.uid
@@ -85,11 +88,28 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        applySystemBarInsets()
         setupViews()
         loadUserData()
         loadEvents()
         loadNotifications()
     }
+
+    private fun applySystemBarInsets() {
+        val header = findViewById<View>(R.id.headerLayout)
+        ViewCompat.setOnApplyWindowInsetsListener(header) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.updatePadding(top = insets.top)
+            windowInsets
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.nestedScrollView) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.updatePadding(bottom = insets.bottom)
+            windowInsets
+        }
+    }
+
 
     private fun setupViews() {
         auth.currentUser?.let { user ->
@@ -177,23 +197,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- NEW CUSTOM DETAILS VIEW LOGIC ---
-
     private fun showCustomEventDetails(event: Event) {
-        // Defer the expensive blur operation to prevent delay
-        thread {
-            val blurredBitmap = createBlurredBitmap()
-            Handler(Looper.getMainLooper()).post {
-                binding.blurView.setImageBitmap(blurredBitmap)
-                binding.blurView.alpha = 0f
-                binding.blurView.visibility = View.VISIBLE
-                ObjectAnimator.ofFloat(binding.blurView, "alpha", 1f).setDuration(400).start()
-            }
-        }
-
+        setMainContentInteraction(false)
         val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
         populateDetailsView(detailsView, event)
         binding.eventDetailsContainer.addView(detailsView)
+
+        binding.darkScrim.visibility = View.VISIBLE
         animateDetailsIn(detailsView)
     }
 
@@ -218,32 +228,12 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
     }
 
-    private fun createBlurredBitmap(): Bitmap? {
-        // Create a bitmap of the root view to capture everything, including the white header
-        val view = window.decorView.rootView
-        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        view.draw(canvas)
-        return try {
-            val rs = RenderScript.create(this)
-            val input = Allocation.createFromBitmap(rs, bitmap)
-            val output = Allocation.createTyped(rs, input.type)
-            val script = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs))
-            script.setRadius(20f)
-            script.setInput(input)
-            script.forEach(output)
-            output.copyTo(bitmap)
-            rs.destroy()
-            bitmap
-        } catch (e: Exception) {
-            null
-        }
-    }
-
     private fun animateDetailsIn(detailsView: View) {
         binding.eventDetailsContainer.visibility = View.VISIBLE
 
-        // Card animation
+        val scrimFadeIn = ObjectAnimator.ofFloat(binding.darkScrim, "alpha", 1f)
+        scrimFadeIn.duration = 400
+
         detailsView.alpha = 0f
         detailsView.scaleX = 0.8f
         detailsView.scaleY = 0.8f
@@ -257,7 +247,6 @@ class MainActivity : AppCompatActivity() {
         cardAnimatorSet.interpolator = OvershootInterpolator(1.1f)
         cardAnimatorSet.duration = 500
 
-        // Staggered animation for card contents
         val contentContainer = detailsView.findViewById<ViewGroup>(R.id.contentContainer)
         val contentAnimators = AnimatorSet()
         val animators = mutableListOf<Animator>()
@@ -279,15 +268,14 @@ class MainActivity : AppCompatActivity() {
         }
         contentAnimators.playTogether(animators)
 
-        // Play all animations in sequence
         val finalAnimatorSet = AnimatorSet()
-        finalAnimatorSet.play(cardAnimatorSet).before(contentAnimators)
+        finalAnimatorSet.play(scrimFadeIn).with(cardAnimatorSet).before(contentAnimators)
         finalAnimatorSet.start()
     }
 
     private fun animateDetailsOut(detailsView: View) {
-        val blurFadeOut = ObjectAnimator.ofFloat(binding.blurView, "alpha", 0f)
-        blurFadeOut.duration = 300
+        val scrimFadeOut = ObjectAnimator.ofFloat(binding.darkScrim, "alpha", 0f)
+        scrimFadeOut.duration = 300
 
         val cardFadeOut = ObjectAnimator.ofFloat(detailsView, "alpha", 0f)
         val cardSlideDown = ObjectAnimator.ofFloat(detailsView, "translationY", 100f)
@@ -298,15 +286,29 @@ class MainActivity : AppCompatActivity() {
         cardAnimatorSet.duration = 300
 
         val finalAnimatorSet = AnimatorSet()
-        finalAnimatorSet.playTogether(blurFadeOut, cardAnimatorSet)
+        finalAnimatorSet.playTogether(scrimFadeOut, cardAnimatorSet)
         finalAnimatorSet.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
-                binding.blurView.visibility = View.GONE
+                binding.darkScrim.visibility = View.GONE
                 binding.eventDetailsContainer.visibility = View.GONE
                 binding.eventDetailsContainer.removeView(detailsView)
+                setMainContentInteraction(true)
             }
         })
         finalAnimatorSet.start()
+    }
+
+    private fun setMainContentInteraction(enabled: Boolean) {
+        fun setViewAndChildrenEnabled(view: View, enabled: Boolean) {
+            view.isEnabled = enabled
+            if (view is ViewGroup) {
+                for (i in 0 until view.childCount) {
+                    val child = view.getChildAt(i)
+                    setViewAndChildrenEnabled(child, enabled)
+                }
+            }
+        }
+        setViewAndChildrenEnabled(binding.mainContent, enabled)
     }
 
     private fun formatDateTime(event: Event): String {
@@ -631,8 +633,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
-    private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
 
     companion object {
         private const val CREATE_EVENT_REQUEST = 1001

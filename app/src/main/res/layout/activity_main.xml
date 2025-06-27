@@ -1,30 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    FIX: The layout has been fundamentally changed to support the custom, animated
-    details view.
-
-    1. The root is now a FrameLayout to allow layering the main content, the blurred
-       background, and the event details card on top of each other.
-    2. The 'darkScrim' view has been removed as requested.
--->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#f8f9fa"
-    android:fitsSystemWindows="true"
     tools:context=".MainActivity">
-
-    <!-- Main Content -->
     <LinearLayout
         android:id="@+id/mainContent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Header -->
         <LinearLayout
+            android:id="@+id/headerLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@android:color/white"
@@ -134,7 +123,6 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Main Content using NestedScrollView to fix the bug -->
         <androidx.core.widget.NestedScrollView
             android:id="@+id/nestedScrollView"
             android:layout_width="match_parent"
@@ -161,7 +149,6 @@
                         android:orientation="vertical"
                         android:padding="20dp">
 
-                        <!-- Section Header -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -233,7 +220,6 @@
                             </LinearLayout>
                         </LinearLayout>
 
-                        <!-- Filter Panel -->
                         <LinearLayout
                             android:id="@+id/filterPanel"
                             android:layout_width="match_parent"
@@ -340,7 +326,6 @@
                                 android:textSize="14sp" />
                         </LinearLayout>
 
-                        <!-- Tabs -->
                         <com.google.android.material.tabs.TabLayout
                             android:id="@+id/tabLayout"
                             android:layout_width="match_parent"
@@ -365,7 +350,6 @@
                                 android:text="Attending" />
                         </com.google.android.material.tabs.TabLayout>
 
-                        <!-- Events RecyclerView -->
                         <androidx.recyclerview.widget.RecyclerView
                             android:id="@+id/eventsRecyclerView"
                             android:layout_width="match_parent"
@@ -374,7 +358,6 @@
                             android:nestedScrollingEnabled="false"
                             tools:listitem="@layout/item_event_card"/>
 
-                        <!-- Loading More Indicator -->
                         <LinearLayout
                             android:id="@+id/loadingMoreLayout"
                             android:layout_width="match_parent"
@@ -397,7 +380,6 @@
                                 android:textSize="14sp" />
                         </LinearLayout>
 
-                        <!-- Empty State -->
                         <TextView
                             android:id="@+id/emptyStateText"
                             android:layout_width="match_parent"
@@ -415,15 +397,14 @@
         </androidx.core.widget.NestedScrollView>
     </LinearLayout>
 
-    <!-- Blurred Background -->
-    <ImageView
-        android:id="@+id/blurView"
+    <View
+        android:id="@+id/darkScrim"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="centerCrop"
+        android:background="@color/scrim_background"
+        android:alpha="0"
         android:visibility="gone" />
 
-    <!-- Event Details Card Container -->
     <FrameLayout
         android:id="@+id/eventDetailsContainer"
         android:layout_width="match_parent"
@@ -434,7 +415,6 @@
         android:paddingEnd="24dp"
         android:clipToPadding="false"
         android:visibility="gone">
-        <!-- The dialog_event_details layout will be inflated here programmatically -->
     </FrameLayout>
 
 </FrameLayout>
