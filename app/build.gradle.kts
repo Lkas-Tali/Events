@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.student.events"
-        minSdk = 24
+        minSdk = 29
         // Aligned SDK to match provided code for compatibility
         targetSdk = 35
         versionCode = 1

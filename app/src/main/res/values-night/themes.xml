@@ -1,7 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.Events" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
-    </style>
+    <!-- Base application theme (night) -->
+    <!-- By setting the parent to a Light theme, we are effectively disabling dark mode. -->
+    <!-- The styles from the default values/themes.xml will be used. -->
+    <style name="Theme.Events" parent="Base.Theme.Events" />
 </resources>

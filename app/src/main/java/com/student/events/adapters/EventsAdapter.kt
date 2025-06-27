@@ -1,5 +1,6 @@
 package com.student.events.adapters
 
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -54,10 +55,8 @@ class EventsAdapter(
         fun bind(event: Event) {
             titleText.text = event.title
             locationText.text = event.location
-            // **Fix**: Use attendeesCount
             attendeesText.text = "${event.attendeesCount} attending"
 
-            // **Fix**: Format date from dateTime object
             event.dateTime?.seconds?.let {
                 val date = Date(it * 1000) // Convert seconds to milliseconds
                 val outputFormat = SimpleDateFormat("d MMMM", Locale.UK)
@@ -66,8 +65,6 @@ class EventsAdapter(
                 dateText.text = "Date not set"
             }
 
-
-            // **Fix**: Load imageUrl
             if (!event.imageUrl.isNullOrEmpty()) {
                 imageView.visibility = View.VISIBLE
                 imagePlaceholder.visibility = View.GONE
@@ -83,7 +80,6 @@ class EventsAdapter(
                 imagePlaceholder.visibility = View.VISIBLE
             }
 
-            // **Fix**: Setup action buttons based on event.organizer.uid
             val isMyEvent = event.organizer?.uid == currentUserId
             val isAttending = event.attendees.containsKey(currentUserId)
 
@@ -92,21 +88,24 @@ class EventsAdapter(
                     // My event: Details, Edit, Cancel
                     action1Button.apply {
                         text = "Details"
-                        setBackgroundResource(R.drawable.secondary_action_bg)
+                        // FIX: Explicitly set background and text colors for secondary action
+                        backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_secondary_bg))
                         setTextColor(itemView.context.getColor(R.color.app_primary_blue))
                         setOnClickListener { onEventClick(event) }
                         visibility = View.VISIBLE
                     }
                     action2Button.apply {
                         text = "Edit"
-                        setBackgroundResource(R.drawable.primary_action_bg)
+                        // FIX: Explicitly set background and text colors for primary action
+                        backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_primary_blue))
                         setTextColor(itemView.context.getColor(android.R.color.white))
                         setOnClickListener { onEditClick(event) }
                         visibility = View.VISIBLE
                     }
                     action3Button.apply {
                         text = "Cancel"
-                        setBackgroundResource(R.drawable.danger_action_bg)
+                        // FIX: Explicitly set background and text colors for danger action
+                        backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_danger_bg))
                         setTextColor(itemView.context.getColor(R.color.danger_text))
                         setOnClickListener { onCancelClick(event) }
                         visibility = View.VISIBLE
@@ -116,14 +115,16 @@ class EventsAdapter(
                     // Attending: Cancel RSVP, Details
                     action1Button.apply {
                         text = "Cancel RSVP"
-                        setBackgroundResource(R.drawable.danger_action_bg)
+                        // FIX: Explicitly set background and text colors for danger action
+                        backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_danger_bg))
                         setTextColor(itemView.context.getColor(R.color.danger_text))
                         setOnClickListener { onCancelRsvpClick(event) }
                         visibility = View.VISIBLE
                     }
                     action2Button.apply {
                         text = "Details"
-                        setBackgroundResource(R.drawable.tertiary_action_bg)
+                        // FIX: Explicitly set background and text colors for tertiary action
+                        backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_tertiary_bg))
                         setTextColor(itemView.context.getColor(R.color.tertiary_text))
                         setOnClickListener { onEventClick(event) }
                         visibility = View.VISIBLE
@@ -134,14 +135,16 @@ class EventsAdapter(
                     // Not attending: Details, RSVP
                     action1Button.apply {
                         text = "Details"
-                        setBackgroundResource(R.drawable.secondary_action_bg)
+                        // FIX: Explicitly set background and text colors for secondary action
+                        backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_secondary_bg))
                         setTextColor(itemView.context.getColor(R.color.app_primary_blue))
                         setOnClickListener { onEventClick(event) }
                         visibility = View.VISIBLE
                     }
                     action2Button.apply {
                         text = "RSVP"
-                        setBackgroundResource(R.drawable.primary_action_bg)
+                        // FIX: Explicitly set background and text colors for primary action
+                        backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_primary_blue))
                         setTextColor(itemView.context.getColor(android.R.color.white))
                         setOnClickListener { onRsvpClick(event) }
                         visibility = View.VISIBLE
