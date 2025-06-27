@@ -1,9 +1,28 @@
 package com.student.events
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.renderscript.Allocation
+import android.renderscript.Element
+import android.renderscript.RenderScript
+import android.renderscript.ScriptIntrinsicBlur
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
+import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -11,6 +30,7 @@ import androidx.core.widget.NestedScrollView
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.google.android.material.tabs.TabLayout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
@@ -21,6 +41,7 @@ import com.student.events.models.Event
 import com.student.events.models.Notification
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
 
@@ -79,7 +100,7 @@ class MainActivity : AppCompatActivity() {
         eventsAdapter = EventsAdapter(
             events = displayedEvents,
             currentUserId = currentUserId ?: "",
-            onEventClick = { event -> showEventDetails(event) },
+            onEventClick = { event -> showCustomEventDetails(event) },
             onEditClick = { event -> showEditEventDialog(event) },
             onCancelClick = { event -> showCancelEventDialog(event) },
             onRsvpClick = { event -> handleRsvp(event) },
@@ -156,6 +177,147 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // --- NEW CUSTOM DETAILS VIEW LOGIC ---
+
+    private fun showCustomEventDetails(event: Event) {
+        // Defer the expensive blur operation to prevent delay
+        thread {
+            val blurredBitmap = createBlurredBitmap()
+            Handler(Looper.getMainLooper()).post {
+                binding.blurView.setImageBitmap(blurredBitmap)
+                binding.blurView.alpha = 0f
+                binding.blurView.visibility = View.VISIBLE
+                ObjectAnimator.ofFloat(binding.blurView, "alpha", 1f).setDuration(400).start()
+            }
+        }
+
+        val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
+        populateDetailsView(detailsView, event)
+        binding.eventDetailsContainer.addView(detailsView)
+        animateDetailsIn(detailsView)
+    }
+
+    private fun populateDetailsView(view: View, event: Event) {
+        view.findViewById<TextView>(R.id.eventTitle).text = event.title
+        view.findViewById<ImageView>(R.id.closeButton).setOnClickListener {
+            animateDetailsOut(view)
+        }
+
+        val imageView = view.findViewById<ImageView>(R.id.eventImage)
+        if (!event.imageUrl.isNullOrEmpty()) {
+            imageView.visibility = View.VISIBLE
+            Glide.with(this).load(event.imageUrl).into(imageView)
+        } else {
+            imageView.visibility = View.GONE
+        }
+
+        view.findViewById<TextView>(R.id.dateTimeText).text = formatDateTime(event)
+        view.findViewById<TextView>(R.id.locationText).text = event.location
+        view.findViewById<TextView>(R.id.descriptionText).text = event.description
+        view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
+        view.findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
+    }
+
+    private fun createBlurredBitmap(): Bitmap? {
+        // Create a bitmap of the root view to capture everything, including the white header
+        val view = window.decorView.rootView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        view.draw(canvas)
+        return try {
+            val rs = RenderScript.create(this)
+            val input = Allocation.createFromBitmap(rs, bitmap)
+            val output = Allocation.createTyped(rs, input.type)
+            val script = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs))
+            script.setRadius(20f)
+            script.setInput(input)
+            script.forEach(output)
+            output.copyTo(bitmap)
+            rs.destroy()
+            bitmap
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun animateDetailsIn(detailsView: View) {
+        binding.eventDetailsContainer.visibility = View.VISIBLE
+
+        // Card animation
+        detailsView.alpha = 0f
+        detailsView.scaleX = 0.8f
+        detailsView.scaleY = 0.8f
+
+        val cardFadeIn = ObjectAnimator.ofFloat(detailsView, "alpha", 1f)
+        val cardScaleX = ObjectAnimator.ofFloat(detailsView, "scaleX", 1f)
+        val cardScaleY = ObjectAnimator.ofFloat(detailsView, "scaleY", 1f)
+
+        val cardAnimatorSet = AnimatorSet()
+        cardAnimatorSet.playTogether(cardFadeIn, cardScaleX, cardScaleY)
+        cardAnimatorSet.interpolator = OvershootInterpolator(1.1f)
+        cardAnimatorSet.duration = 500
+
+        // Staggered animation for card contents
+        val contentContainer = detailsView.findViewById<ViewGroup>(R.id.contentContainer)
+        val contentAnimators = AnimatorSet()
+        val animators = mutableListOf<Animator>()
+
+        for (i in 0 until contentContainer.childCount) {
+            val child = contentContainer.getChildAt(i)
+            child.alpha = 0f
+            child.translationY = 80f
+
+            val childFade = ObjectAnimator.ofFloat(child, "alpha", 1f)
+            val childSlide = ObjectAnimator.ofFloat(child, "translationY", 0f)
+
+            val childSet = AnimatorSet()
+            childSet.playTogether(childFade, childSlide)
+            childSet.duration = 400
+            childSet.interpolator = DecelerateInterpolator()
+            childSet.startDelay = (i * 60).toLong()
+            animators.add(childSet)
+        }
+        contentAnimators.playTogether(animators)
+
+        // Play all animations in sequence
+        val finalAnimatorSet = AnimatorSet()
+        finalAnimatorSet.play(cardAnimatorSet).before(contentAnimators)
+        finalAnimatorSet.start()
+    }
+
+    private fun animateDetailsOut(detailsView: View) {
+        val blurFadeOut = ObjectAnimator.ofFloat(binding.blurView, "alpha", 0f)
+        blurFadeOut.duration = 300
+
+        val cardFadeOut = ObjectAnimator.ofFloat(detailsView, "alpha", 0f)
+        val cardSlideDown = ObjectAnimator.ofFloat(detailsView, "translationY", 100f)
+
+        val cardAnimatorSet = AnimatorSet()
+        cardAnimatorSet.playTogether(cardFadeOut, cardSlideDown)
+        cardAnimatorSet.interpolator = DecelerateInterpolator()
+        cardAnimatorSet.duration = 300
+
+        val finalAnimatorSet = AnimatorSet()
+        finalAnimatorSet.playTogether(blurFadeOut, cardAnimatorSet)
+        finalAnimatorSet.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                binding.blurView.visibility = View.GONE
+                binding.eventDetailsContainer.visibility = View.GONE
+                binding.eventDetailsContainer.removeView(detailsView)
+            }
+        })
+        finalAnimatorSet.start()
+    }
+
+    private fun formatDateTime(event: Event): String {
+        event.dateTime?.seconds?.let {
+            val date = Date(it * 1000)
+            val displayFormat = SimpleDateFormat("EEEE, d MMMM HH:mm", Locale.UK)
+            return displayFormat.format(date)
+        }
+        return "Date and time not specified"
+    }
+
     private fun getSpanCount(): Int {
         val displayMetrics = resources.displayMetrics
         val dpWidth = displayMetrics.widthPixels / displayMetrics.density
@@ -184,7 +346,6 @@ class MainActivity : AppCompatActivity() {
                     allEvents.clear()
                     myEvents.clear()
                     attendingEvents.clear()
-
                     for (eventSnapshot in snapshot.children) {
                         val event = eventSnapshot.getValue(Event::class.java)
                         event?.let {
@@ -194,11 +355,9 @@ class MainActivity : AppCompatActivity() {
                             if (it.attendees.containsKey(currentUserId)) attendingEvents.add(it)
                         }
                     }
-
                     sortEventsByDate(allEvents)
                     sortEventsByDate(myEvents)
                     sortEventsByDate(attendingEvents)
-
                     resetAndLoadEvents()
                 }
                 override fun onCancelled(error: DatabaseError) {
@@ -218,33 +377,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadMoreEvents() {
         if (isLoading || !hasMoreEvents) return
-
         isLoading = true
         binding.loadingMoreLayout.visibility = View.VISIBLE
-
         val sourceList = when (currentTab) {
             "discover" -> allEvents
             "myEvents" -> myEvents
             "attending" -> attendingEvents
             else -> emptyList()
         }
-
         val filteredList = filterEvents(sourceList)
-
         val startIndex = currentDisplayedCount
         val endIndex = (startIndex + EVENTS_PER_PAGE).coerceAtMost(filteredList.size)
-
         if (startIndex < endIndex) {
             val newEvents = filteredList.subList(startIndex, endIndex)
             displayedEvents.addAll(newEvents)
             eventsAdapter.notifyItemRangeInserted(startIndex, newEvents.size)
             currentDisplayedCount += newEvents.size
         }
-
         hasMoreEvents = currentDisplayedCount < filteredList.size
-
         updateEmptyState(displayedEvents.isEmpty())
-
         binding.loadingMoreLayout.visibility = if (hasMoreEvents) View.VISIBLE else View.GONE
         isLoading = false
     }
@@ -344,11 +495,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showEventDetails(event: Event) {
-        val dialog = EventDetailsDialog(this, event)
-        dialog.show()
-    }
-
     private fun showEditEventDialog(event: Event) {
         val intent = Intent(this, CreateEventActivity::class.java).apply {
             putExtra("editMode", true)
@@ -386,23 +532,15 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // --- FIX: This function now also deletes the image from Firebase Storage ---
     private fun deleteEvent(event: Event) {
-        // First, check if there is an image URL.
         if (!event.imageUrl.isNullOrEmpty()) {
-            // Get a reference to the image file from the URL.
             val photoRef = FirebaseStorage.getInstance().getReferenceFromUrl(event.imageUrl)
-
-            // Delete the file from Storage.
             photoRef.delete().addOnSuccessListener {
-                // If the image is deleted successfully, then delete the event from the database.
                 deleteEventFromDatabase(event.id)
             }.addOnFailureListener {
-                // If image deletion fails, show an error and DON'T delete the database entry.
                 Toast.makeText(this, "Failed to delete event image. Please try again.", Toast.LENGTH_SHORT).show()
             }
         } else {
-            // If there's no image, just delete the event from the database directly.
             deleteEventFromDatabase(event.id)
         }
     }

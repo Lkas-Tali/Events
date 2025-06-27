@@ -1,412 +1,440 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    FIX: The root cause of the bug was that the RecyclerView was nested inside a ScrollView.
-    This is an anti-pattern that breaks the RecyclerView's ability to recycle and measure
-    views properly, leading to items randomly not appearing.
+    FIX: The layout has been fundamentally changed to support the custom, animated
+    details view.
 
-    The layout has been restructured to remove the ScrollView. The main content area
-    (the CardView) now expands to fill the available space, and the RecyclerView
-    is now the primary scrolling view within that area.
+    1. The root is now a FrameLayout to allow layering the main content, the blurred
+       background, and the event details card on top of each other.
+    2. The 'darkScrim' view has been removed as requested.
 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#f8f9fa"
     android:fitsSystemWindows="true"
-    android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <!-- Header (remains the same) -->
+    <!-- Main Content -->
     <LinearLayout
+        android:id="@+id/mainContent"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@android:color/white"
-        android:elevation="2dp"
-        android:orientation="vertical"
-        android:paddingStart="16dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="8dp">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
+        <!-- Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-                <FrameLayout
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="@drawable/logo_background">
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_final_events_logo"
-                        app:tint="@android:color/white" />
-                </FrameLayout>
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:text="Events"
-                    android:textColor="#1F2937"
-                    android:textSize="20sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-                <FrameLayout
-                    android:id="@+id/notificationBell"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:clickable="true"
-                    android:focusable="true">
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_notifications" />
-                    <View
-                        android:id="@+id/notificationBadge"
-                        android:layout_width="10dp"
-                        android:layout_height="10dp"
-                        android:layout_gravity="top|end"
-                        android:layout_marginTop="4dp"
-                        android:layout_marginEnd="4dp"
-                        android:background="@drawable/notification_badge"
-                        android:visibility="gone" />
-                </FrameLayout>
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:gravity="end"
-                    android:orientation="vertical">
-                    <TextView
-                        android:id="@+id/userNameText"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="John Doe"
-                        android:textColor="#1F2937"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-                    <TextView
-                        android:id="@+id/userEmailText"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="john.doe@example.com"
-                        android:textColor="#6B7280"
-                        android:textSize="12sp" />
-                </LinearLayout>
-                <Button
-                    android:id="@+id/logoutButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="12dp"
-                    android:background="@drawable/logout_button_bg"
-                    android:minWidth="0dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:text="Logout"
-                    android:textAllCaps="false"
-                    android:textColor="#6B7280"
-                    android:textSize="13sp" />
-            </LinearLayout>
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- Main Content using NestedScrollView to fix the bug -->
-    <!-- FIX: Added an id to the NestedScrollView -->
-    <androidx.core.widget.NestedScrollView
-        android:id="@+id/nestedScrollView"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:background="@android:color/white"
+            android:elevation="2dp"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="8dp">
 
-            <androidx.cardview.widget.CardView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="2dp">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/logo_background">
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_final_events_logo"
+                            app:tint="@android:color/white" />
+                    </FrameLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:text="Events"
+                        android:textColor="#1F2937"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+                    <FrameLayout
+                        android:id="@+id/notificationBell"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:focusable="true">
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_notifications" />
+                        <View
+                            android:id="@+id/notificationBadge"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:layout_gravity="top|end"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginEnd="4dp"
+                            android:background="@drawable/notification_badge"
+                            android:visibility="gone" />
+                    </FrameLayout>
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:gravity="end"
+                        android:orientation="vertical">
+                        <TextView
+                            android:id="@+id/userNameText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="John Doe"
+                            android:textColor="#1F2937"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                        <TextView
+                            android:id="@+id/userEmailText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="john.doe@example.com"
+                            android:textColor="#6B7280"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                    <Button
+                        android:id="@+id/logoutButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="12dp"
+                        android:background="@drawable/logout_button_bg"
+                        android:minWidth="0dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="Logout"
+                        android:textAllCaps="false"
+                        android:textColor="#6B7280"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Main Content using NestedScrollView to fix the bug -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/nestedScrollView"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <androidx.cardview.widget.CardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="20dp">
+                    app:cardBackgroundColor="@android:color/white"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="2dp">
 
-                    <!-- Section Header -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="vertical">
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Events"
-                            android:textColor="#1F2937"
-                            android:textSize="20sp"
-                            android:textStyle="bold" />
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <!-- Section Header -->
                         <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Events"
+                                android:textColor="#1F2937"
+                                android:textSize="20sp"
+                                android:textStyle="bold" />
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="16dp"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+                                <FrameLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginEnd="8dp">
+                                    <EditText
+                                        android:id="@+id/searchEditText"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="40dp"
+                                        android:background="@drawable/search_input_bg"
+                                        android:hint="Search by keyword..."
+                                        android:paddingStart="36dp"
+                                        android:paddingEnd="12dp"
+                                        android:textSize="14sp" />
+                                    <ImageView
+                                        android:layout_width="16dp"
+                                        android:layout_height="16dp"
+                                        android:layout_gravity="center_vertical"
+                                        android:layout_marginStart="12dp"
+                                        android:src="@drawable/ic_search"
+                                        app:tint="#6B7280" />
+                                </FrameLayout>
+                                <Button
+                                    android:id="@+id/filterButton"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:layout_marginEnd="8dp"
+                                    android:background="@drawable/filter_button_bg"
+                                    android:drawableStart="@drawable/ic_filter"
+                                    android:drawablePadding="6dp"
+                                    android:minWidth="0dp"
+                                    android:paddingStart="12dp"
+                                    android:paddingEnd="12dp"
+                                    android:text="Filters"
+                                    android:textAllCaps="false"
+                                    android:textColor="#374151"
+                                    android:textSize="14sp" />
+                                <Button
+                                    android:id="@+id/createEventButton"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:background="@drawable/create_button_bg"
+                                    android:minWidth="0dp"
+                                    android:paddingStart="16dp"
+                                    android:paddingEnd="16dp"
+                                    android:text="Create Event"
+                                    android:textAllCaps="false"
+                                    android:textColor="@android:color/white"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- Filter Panel -->
+                        <LinearLayout
+                            android:id="@+id/filterPanel"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="16dp"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-                            <FrameLayout
-                                android:layout_width="0dp"
+                            android:background="@drawable/filter_panel_bg"
+                            android:orientation="vertical"
+                            android:padding="16dp"
+                            android:visibility="gone">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginEnd="8dp">
-                                <EditText
-                                    android:id="@+id/searchEditText"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="40dp"
-                                    android:background="@drawable/search_input_bg"
-                                    android:hint="Search by keyword..."
-                                    android:paddingStart="36dp"
-                                    android:paddingEnd="12dp"
-                                    android:textSize="14sp" />
-                                <ImageView
-                                    android:layout_width="16dp"
-                                    android:layout_height="16dp"
-                                    android:layout_gravity="center_vertical"
-                                    android:layout_marginStart="12dp"
-                                    android:src="@drawable/ic_search"
-                                    app:tint="#6B7280" />
-                            </FrameLayout>
+                                android:orientation="horizontal">
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginEnd="12dp"
+                                    android:orientation="vertical">
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Location"
+                                        android:textColor="#6B7280"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                    <EditText
+                                        android:id="@+id/locationFilterInput"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="40dp"
+                                        android:layout_marginTop="4dp"
+                                        android:background="@drawable/filter_input_bg"
+                                        android:hint="e.g. London"
+                                        android:paddingStart="12dp"
+                                        android:paddingEnd="12dp"
+                                        android:textSize="14sp" />
+                                </LinearLayout>
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginEnd="12dp"
+                                    android:orientation="vertical">
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="From"
+                                        android:textColor="#6B7280"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                    <EditText
+                                        android:id="@+id/startDateInput"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="40dp"
+                                        android:layout_marginTop="4dp"
+                                        android:background="@drawable/filter_input_bg"
+                                        android:clickable="true"
+                                        android:focusable="false"
+                                        android:hint="Select date"
+                                        android:paddingStart="12dp"
+                                        android:paddingEnd="12dp"
+                                        android:textSize="14sp" />
+                                </LinearLayout>
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="To"
+                                        android:textColor="#6B7280"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold" />
+                                    <EditText
+                                        android:id="@+id/endDateInput"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="40dp"
+                                        android:layout_marginTop="4dp"
+                                        android:background="@drawable/filter_input_bg"
+                                        android:clickable="true"
+                                        android:focusable="false"
+                                        android:hint="Select date"
+                                        android:paddingStart="12dp"
+                                        android:paddingEnd="12dp"
+                                        android:textSize="14sp" />
+                                </LinearLayout>
+                            </LinearLayout>
                             <Button
-                                android:id="@+id/filterButton"
+                                android:id="@+id/clearFiltersButton"
                                 android:layout_width="wrap_content"
                                 android:layout_height="40dp"
-                                android:layout_marginEnd="8dp"
+                                android:layout_gravity="end"
+                                android:layout_marginTop="12dp"
                                 android:background="@drawable/filter_button_bg"
-                                android:drawableStart="@drawable/ic_filter"
-                                android:drawablePadding="6dp"
-                                android:minWidth="0dp"
-                                android:paddingStart="12dp"
-                                android:paddingEnd="12dp"
-                                android:text="Filters"
-                                android:textAllCaps="false"
-                                android:textColor="#374151"
-                                android:textSize="14sp" />
-                            <Button
-                                android:id="@+id/createEventButton"
-                                android:layout_width="wrap_content"
-                                android:layout_height="40dp"
-                                android:background="@drawable/create_button_bg"
                                 android:minWidth="0dp"
                                 android:paddingStart="16dp"
                                 android:paddingEnd="16dp"
-                                android:text="Create Event"
+                                android:text="Clear"
                                 android:textAllCaps="false"
-                                android:textColor="@android:color/white"
-                                android:textSize="14sp"
-                                android:textStyle="bold" />
+                                android:textColor="#374151"
+                                android:textSize="14sp" />
                         </LinearLayout>
-                    </LinearLayout>
 
-                    <!-- Filter Panel -->
-                    <LinearLayout
-                        android:id="@+id/filterPanel"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:background="@drawable/filter_panel_bg"
-                        android:orientation="vertical"
-                        android:padding="16dp"
-                        android:visibility="gone">
-
-                        <LinearLayout
+                        <!-- Tabs -->
+                        <com.google.android.material.tabs.TabLayout
+                            android:id="@+id/tabLayout"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal">
-                            <LinearLayout
-                                android:layout_width="0dp"
+                            android:layout_marginTop="20dp"
+                            app:tabGravity="start"
+                            app:tabIndicatorColor="@color/app_primary_blue"
+                            app:tabMode="fixed"
+                            app:tabSelectedTextColor="@color/app_primary_blue"
+                            app:tabTextColor="#6B7280">
+                            <com.google.android.material.tabs.TabItem
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginEnd="12dp"
-                                android:orientation="vertical">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="Location"
-                                    android:textColor="#6B7280"
-                                    android:textSize="12sp"
-                                    android:textStyle="bold" />
-                                <EditText
-                                    android:id="@+id/locationFilterInput"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="40dp"
-                                    android:layout_marginTop="4dp"
-                                    android:background="@drawable/filter_input_bg"
-                                    android:hint="e.g. London"
-                                    android:paddingStart="12dp"
-                                    android:paddingEnd="12dp"
-                                    android:textSize="14sp" />
-                            </LinearLayout>
-                            <LinearLayout
-                                android:layout_width="0dp"
+                                android:text="Discover" />
+                            <com.google.android.material.tabs.TabItem
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginEnd="12dp"
-                                android:orientation="vertical">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="From"
-                                    android:textColor="#6B7280"
-                                    android:textSize="12sp"
-                                    android:textStyle="bold" />
-                                <EditText
-                                    android:id="@+id/startDateInput"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="40dp"
-                                    android:layout_marginTop="4dp"
-                                    android:background="@drawable/filter_input_bg"
-                                    android:clickable="true"
-                                    android:focusable="false"
-                                    android:hint="Select date"
-                                    android:paddingStart="12dp"
-                                    android:paddingEnd="12dp"
-                                    android:textSize="14sp" />
-                            </LinearLayout>
-                            <LinearLayout
-                                android:layout_width="0dp"
+                                android:text="My Events" />
+                            <com.google.android.material.tabs.TabItem
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="To"
-                                    android:textColor="#6B7280"
-                                    android:textSize="12sp"
-                                    android:textStyle="bold" />
-                                <EditText
-                                    android:id="@+id/endDateInput"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="40dp"
-                                    android:layout_marginTop="4dp"
-                                    android:background="@drawable/filter_input_bg"
-                                    android:clickable="true"
-                                    android:focusable="false"
-                                    android:hint="Select date"
-                                    android:paddingStart="12dp"
-                                    android:paddingEnd="12dp"
-                                    android:textSize="14sp" />
-                            </LinearLayout>
+                                android:text="Attending" />
+                        </com.google.android.material.tabs.TabLayout>
+
+                        <!-- Events RecyclerView -->
+                        <androidx.recyclerview.widget.RecyclerView
+                            android:id="@+id/eventsRecyclerView"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="20dp"
+                            android:nestedScrollingEnabled="false"
+                            tools:listitem="@layout/item_event_card"/>
+
+                        <!-- Loading More Indicator -->
+                        <LinearLayout
+                            android:id="@+id/loadingMoreLayout"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:orientation="vertical"
+                            android:padding="16dp"
+                            android:visibility="gone">
+                            <ProgressBar
+                                style="?android:attr/progressBarStyle"
+                                android:layout_width="36dp"
+                                android:layout_height="36dp"
+                                android:indeterminateTint="@color/app_primary_blue" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:text="Loading more events..."
+                                android:textColor="#6B7280"
+                                android:textSize="14sp" />
                         </LinearLayout>
-                        <Button
-                            android:id="@+id/clearFiltersButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="40dp"
-                            android:layout_gravity="end"
-                            android:layout_marginTop="12dp"
-                            android:background="@drawable/filter_button_bg"
-                            android:minWidth="0dp"
-                            android:paddingStart="16dp"
-                            android:paddingEnd="16dp"
-                            android:text="Clear"
-                            android:textAllCaps="false"
-                            android:textColor="#374151"
-                            android:textSize="14sp" />
-                    </LinearLayout>
 
-                    <!-- Tabs -->
-                    <com.google.android.material.tabs.TabLayout
-                        android:id="@+id/tabLayout"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="20dp"
-                        app:tabGravity="start"
-                        app:tabIndicatorColor="@color/app_primary_blue"
-                        app:tabMode="fixed"
-                        app:tabSelectedTextColor="@color/app_primary_blue"
-                        app:tabTextColor="#6B7280">
-                        <com.google.android.material.tabs.TabItem
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Discover" />
-                        <com.google.android.material.tabs.TabItem
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="My Events" />
-                        <com.google.android.material.tabs.TabItem
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Attending" />
-                    </com.google.android.material.tabs.TabLayout>
-
-                    <!-- Events RecyclerView -->
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/eventsRecyclerView"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="20dp"
-                        android:nestedScrollingEnabled="false"
-                        tools:listitem="@layout/item_event_card"/>
-
-                    <!-- Loading More Indicator (now used as a general loading state) -->
-                    <LinearLayout
-                        android:id="@+id/loadingMoreLayout"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="16dp"
-                        android:visibility="gone">
-                        <ProgressBar
-                            style="?android:attr/progressBarStyle"
-                            android:layout_width="36dp"
-                            android:layout_height="36dp"
-                            android:indeterminateTint="@color/app_primary_blue" />
+                        <!-- Empty State -->
                         <TextView
-                            android:layout_width="wrap_content"
+                            android:id="@+id/emptyStateText"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:text="Loading more events..."
+                            android:layout_marginTop="48dp"
+                            android:layout_marginBottom="48dp"
+                            android:gravity="center"
+                            android:text="No events available."
                             android:textColor="#6B7280"
-                            android:textSize="14sp" />
+                            android:textSize="16sp"
+                            android:visibility="gone" />
                     </LinearLayout>
+                </androidx.cardview.widget.CardView>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
 
-                    <!-- Empty State -->
-                    <TextView
-                        android:id="@+id/emptyStateText"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="48dp"
-                        android:layout_marginBottom="48dp"
-                        android:gravity="center"
-                        android:text="No events available."
-                        android:textColor="#6B7280"
-                        android:textSize="16sp"
-                        android:visibility="gone" />
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
-        </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
-</LinearLayout>
+    <!-- Blurred Background -->
+    <ImageView
+        android:id="@+id/blurView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <!-- Event Details Card Container -->
+    <FrameLayout
+        android:id="@+id/eventDetailsContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingTop="48dp"
+        android:paddingBottom="48dp"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:clipToPadding="false"
+        android:visibility="gone">
+        <!-- The dialog_event_details layout will be inflated here programmatically -->
+    </FrameLayout>
+
+</FrameLayout>
