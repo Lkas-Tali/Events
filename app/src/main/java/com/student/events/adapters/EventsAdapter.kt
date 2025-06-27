@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.student.events.R
@@ -36,10 +37,16 @@ class EventsAdapter(
 
     override fun getItemCount() = events.size
 
+    // --- FIX STARTS HERE ---
+    // The updateEvents function now uses DiffUtil to efficiently calculate
+    // and dispatch updates to the RecyclerView, preventing display bugs.
     fun updateEvents(newEvents: List<Event>) {
-        events = newEvents
-        notifyDataSetChanged()
+        val diffCallback = EventDiffCallback(this.events, newEvents)
+        val diffResult = DiffUtil.calculateDiff(diffCallback)
+        this.events = newEvents
+        diffResult.dispatchUpdatesTo(this)
     }
+    // --- FIX ENDS HERE ---
 
     inner class EventViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val imageView: ImageView = itemView.findViewById(R.id.eventImage)
@@ -85,10 +92,8 @@ class EventsAdapter(
 
             when {
                 isMyEvent -> {
-                    // My event: Details, Edit, Cancel
                     action1Button.apply {
                         text = "Details"
-                        // FIX: Explicitly set background and text colors for secondary action
                         backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_secondary_bg))
                         setTextColor(itemView.context.getColor(R.color.app_primary_blue))
                         setOnClickListener { onEventClick(event) }
@@ -96,7 +101,6 @@ class EventsAdapter(
                     }
                     action2Button.apply {
                         text = "Edit"
-                        // FIX: Explicitly set background and text colors for primary action
                         backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_primary_blue))
                         setTextColor(itemView.context.getColor(android.R.color.white))
                         setOnClickListener { onEditClick(event) }
@@ -104,7 +108,6 @@ class EventsAdapter(
                     }
                     action3Button.apply {
                         text = "Cancel"
-                        // FIX: Explicitly set background and text colors for danger action
                         backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_danger_bg))
                         setTextColor(itemView.context.getColor(R.color.danger_text))
                         setOnClickListener { onCancelClick(event) }
@@ -112,10 +115,8 @@ class EventsAdapter(
                     }
                 }
                 isAttending -> {
-                    // Attending: Cancel RSVP, Details
                     action1Button.apply {
                         text = "Cancel RSVP"
-                        // FIX: Explicitly set background and text colors for danger action
                         backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_danger_bg))
                         setTextColor(itemView.context.getColor(R.color.danger_text))
                         setOnClickListener { onCancelRsvpClick(event) }
@@ -123,7 +124,6 @@ class EventsAdapter(
                     }
                     action2Button.apply {
                         text = "Details"
-                        // FIX: Explicitly set background and text colors for tertiary action
                         backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_tertiary_bg))
                         setTextColor(itemView.context.getColor(R.color.tertiary_text))
                         setOnClickListener { onEventClick(event) }
@@ -132,10 +132,8 @@ class EventsAdapter(
                     action3Button.visibility = View.GONE
                 }
                 else -> {
-                    // Not attending: Details, RSVP
                     action1Button.apply {
                         text = "Details"
-                        // FIX: Explicitly set background and text colors for secondary action
                         backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_secondary_bg))
                         setTextColor(itemView.context.getColor(R.color.app_primary_blue))
                         setOnClickListener { onEventClick(event) }
@@ -143,7 +141,6 @@ class EventsAdapter(
                     }
                     action2Button.apply {
                         text = "RSVP"
-                        // FIX: Explicitly set background and text colors for primary action
                         backgroundTintList = ColorStateList.valueOf(itemView.context.getColor(R.color.app_primary_blue))
                         setTextColor(itemView.context.getColor(android.R.color.white))
                         setOnClickListener { onRsvpClick(event) }
@@ -153,5 +150,24 @@ class EventsAdapter(
                 }
             }
         }
+    }
+}
+
+// --- DiffUtil Callback Class ---
+class EventDiffCallback(
+    private val oldList: List<Event>,
+    private val newList: List<Event>
+) : DiffUtil.Callback() {
+    override fun getOldListSize(): Int = oldList.size
+    override fun getNewListSize(): Int = newList.size
+
+    override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+        // Items are the same if their IDs are the same
+        return oldList[oldItemPosition].id == newList[newItemPosition].id
+    }
+
+    override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+        // Contents are the same if the event objects are equal
+        return oldList[oldItemPosition] == newList[newItemPosition]
     }
 }

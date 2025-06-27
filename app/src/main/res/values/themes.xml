@@ -21,8 +21,12 @@
         <item name="colorOnError">@color/white</item>
 
         <!-- Status bar -->
-        <item name="android:statusBarColor">@color/white</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@color/app_primary_blue</item>
+        <item name="android:windowLightStatusBar">false</item>
+
+        <!-- Enable edge-to-edge but with proper handling -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
 
         <!-- Override Material button tint -->
         <item name="materialButtonStyle">@style/Widget.App.Button</item>

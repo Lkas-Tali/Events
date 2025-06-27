@@ -14,7 +14,6 @@ import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.storage.FirebaseStorage
 import com.student.events.databinding.ActivityCreateEventBinding
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
@@ -43,7 +42,6 @@ class CreateEventActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
         database = FirebaseDatabase.getInstance()
 
-        // Check if we're in edit mode
         isEditMode = intent.getBooleanExtra("editMode", false)
         if (isEditMode) {
             setupEditMode()
@@ -56,7 +54,6 @@ class CreateEventActivity : AppCompatActivity() {
         binding.pageTitle.text = "Edit Event"
         binding.createButton.text = "Save Changes"
 
-        // Populate fields with existing data
         eventId = intent.getStringExtra("eventId")
         binding.titleInput.setText(intent.getStringExtra("eventTitle"))
         selectedDate = intent.getStringExtra("eventDate") ?: ""
@@ -65,11 +62,9 @@ class CreateEventActivity : AppCompatActivity() {
         binding.descriptionInput.setText(intent.getStringExtra("eventDescription"))
         existingImageUrl = intent.getStringExtra("eventImage")
 
-        // Format and display date/time
         binding.dateInput.setText(formatDateForDisplay(selectedDate))
         binding.timeInput.setText(selectedTime)
 
-        // Load existing image if available
         existingImageUrl?.let { url ->
             if (url.isNotEmpty()) {
                 binding.imagePreview.visibility = View.VISIBLE
@@ -82,26 +77,11 @@ class CreateEventActivity : AppCompatActivity() {
     }
 
     private fun setupViews() {
-        binding.backButton.setOnClickListener {
-            finish()
-        }
-
-        binding.dateInput.setOnClickListener {
-            showDatePicker()
-        }
-
-        binding.timeInput.setOnClickListener {
-            showTimePicker()
-        }
-
-        binding.imageUploadArea.setOnClickListener {
-            selectImage()
-        }
-
-        binding.cancelButton.setOnClickListener {
-            finish()
-        }
-
+        binding.backButton.setOnClickListener { finish() }
+        binding.dateInput.setOnClickListener { showDatePicker() }
+        binding.timeInput.setOnClickListener { showTimePicker() }
+        binding.imageUploadArea.setOnClickListener { selectImage() }
+        binding.cancelButton.setOnClickListener { finish() }
         binding.createButton.setOnClickListener {
             if (validateInputs()) {
                 if (isEditMode) {
@@ -115,17 +95,12 @@ class CreateEventActivity : AppCompatActivity() {
 
     private fun showDatePicker() {
         val calendar = Calendar.getInstance()
-
-        // If editing and date exists, parse it
         if (isEditMode && selectedDate.isNotEmpty()) {
             try {
                 val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(selectedDate)
                 date?.let { calendar.time = it }
-            } catch (e: Exception) {
-                // Ignore parsing errors
-            }
+            } catch (e: Exception) { /* Ignore */ }
         }
-
         DatePickerDialog(
             this,
             { _, year, month, dayOfMonth ->
@@ -141,8 +116,6 @@ class CreateEventActivity : AppCompatActivity() {
 
     private fun showTimePicker() {
         val calendar = Calendar.getInstance()
-
-        // If editing and time exists, parse it
         if (isEditMode && selectedTime.isNotEmpty()) {
             try {
                 val parts = selectedTime.split(":")
@@ -150,11 +123,8 @@ class CreateEventActivity : AppCompatActivity() {
                     calendar.set(Calendar.HOUR_OF_DAY, parts[0].toInt())
                     calendar.set(Calendar.MINUTE, parts[1].toInt())
                 }
-            } catch (e: Exception) {
-                // Ignore parsing errors
-            }
+            } catch (e: Exception) { /* Ignore */ }
         }
-
         TimePickerDialog(
             this,
             { _, hourOfDay, minute ->
@@ -174,7 +144,6 @@ class CreateEventActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-
         if (requestCode == IMAGE_PICK_REQUEST && resultCode == Activity.RESULT_OK) {
             data?.data?.let { uri ->
                 selectedImageUri = uri
@@ -186,6 +155,7 @@ class CreateEventActivity : AppCompatActivity() {
     }
 
     private fun validateInputs(): Boolean {
+        // (Input validation remains the same)
         val title = binding.titleInput.text.toString().trim()
         val location = binding.locationInput.text.toString().trim()
         val description = binding.descriptionInput.text.toString().trim()
@@ -212,47 +182,43 @@ class CreateEventActivity : AppCompatActivity() {
                 return false
             }
         }
-
         return true
     }
 
+    // --- FIX STARTS HERE ---
+    // The following functions `createEvent`, `updateEvent`, `saveEventToDatabase`,
+    // and `updateEventInDatabase` have been updated to save the data in the correct
+    // structure that matches your `Event.kt` model. This prevents data corruption.
+
     private fun createEvent() {
         setLoading(true)
-
         val title = binding.titleInput.text.toString().trim()
         val location = binding.locationInput.text.toString().trim()
         val description = binding.descriptionInput.text.toString().trim()
         val userId = auth.currentUser?.uid ?: return
         val userName = auth.currentUser?.displayName ?: "Unknown"
 
-        // First, handle image upload if selected
         if (selectedImageUri != null) {
-            uploadImageAndCreateEvent(title, location, description, userId, userName)
+            uploadImageAndSaveEvent(title, location, description, userId, userName)
         } else {
-            // Create event without image
             saveEventToDatabase(title, location, description, userId, userName, null)
         }
     }
 
     private fun updateEvent() {
         setLoading(true)
-
         val title = binding.titleInput.text.toString().trim()
         val location = binding.locationInput.text.toString().trim()
         val description = binding.descriptionInput.text.toString().trim()
 
-        // If new image selected, upload it first
         if (selectedImageUri != null) {
-            uploadImageAndUpdateEvent(title, location, description)
+            uploadImageAndSaveEvent(title, location, description, null, null, isUpdate = true)
         } else {
-            // Update event with existing image or no image
             updateEventInDatabase(title, location, description, existingImageUrl)
         }
     }
 
-    private fun uploadImageAndCreateEvent(title: String, location: String, description: String, userId: String, userName: String) {
-        // Convert image to base64 for simple storage
-        // In production, you'd want to use Firebase Storage
+    private fun uploadImageAndSaveEvent(title: String, location: String, description: String, userId: String?, userName: String?, isUpdate: Boolean = false) {
         try {
             val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, selectedImageUri)
             val outputStream = ByteArrayOutputStream()
@@ -260,42 +226,38 @@ class CreateEventActivity : AppCompatActivity() {
             val imageBytes = outputStream.toByteArray()
             val base64Image = "data:image/jpeg;base64," + Base64.encodeToString(imageBytes, Base64.DEFAULT)
 
-            saveEventToDatabase(title, location, description, userId, userName, base64Image)
+            if (isUpdate) {
+                updateEventInDatabase(title, location, description, base64Image)
+            } else {
+                saveEventToDatabase(title, location, description, userId!!, userName!!, base64Image)
+            }
         } catch (e: Exception) {
             Toast.makeText(this, "Failed to process image", Toast.LENGTH_SHORT).show()
             setLoading(false)
         }
     }
 
-    private fun uploadImageAndUpdateEvent(title: String, location: String, description: String) {
-        try {
-            val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, selectedImageUri)
-            val outputStream = ByteArrayOutputStream()
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, outputStream)
-            val imageBytes = outputStream.toByteArray()
-            val base64Image = "data:image/jpeg;base64," + Base64.encodeToString(imageBytes, Base64.DEFAULT)
-
-            updateEventInDatabase(title, location, description, base64Image)
+    private fun getCombinedDateTime(): Map<String, Long>? {
+        return try {
+            val format = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+            val date = format.parse("$selectedDate $selectedTime")
+            mapOf("_seconds" to (date!!.time / 1000), "_nanoseconds" to 0)
         } catch (e: Exception) {
-            Toast.makeText(this, "Failed to process image", Toast.LENGTH_SHORT).show()
-            setLoading(false)
+            null
         }
     }
 
     private fun saveEventToDatabase(title: String, location: String, description: String, userId: String, userName: String, imageUrl: String?) {
         val event = hashMapOf(
             "title" to title,
-            "date" to selectedDate,
-            "time" to selectedTime,
             "location" to location,
             "description" to description,
-            "image" to (imageUrl ?: ""),
-            "organizerId" to userId,
-            "organizerName" to userName,
-            "attendees" to mapOf<String, String>(),
-            "attendeeCount" to 0,
+            "imageUrl" to (imageUrl ?: ""),
+            "organizer" to mapOf("uid" to userId, "fullName" to userName),
+            "attendees" to mapOf<String, Any>(),
+            "attendeesCount" to 0,
             "status" to "upcoming",
-            "createdAt" to System.currentTimeMillis()
+            "dateTime" to getCombinedDateTime()
         )
 
         database.reference.child("events").push().setValue(event)
@@ -312,17 +274,15 @@ class CreateEventActivity : AppCompatActivity() {
 
     private fun updateEventInDatabase(title: String, location: String, description: String, imageUrl: String?) {
         eventId?.let { id ->
-            val updates = hashMapOf<String, Any>(
+            val updates = hashMapOf<String, Any?>(
                 "title" to title,
-                "date" to selectedDate,
-                "time" to selectedTime,
                 "location" to location,
-                "description" to description
+                "description" to description,
+                "dateTime" to getCombinedDateTime()
             )
 
-            // Only update image if it changed
             imageUrl?.let {
-                updates["image"] = it
+                updates["imageUrl"] = it
             }
 
             database.reference.child("events").child(id).updateChildren(updates)
@@ -337,6 +297,8 @@ class CreateEventActivity : AppCompatActivity() {
                 }
         }
     }
+
+    // --- FIX ENDS HERE ---
 
     private fun setLoading(isLoading: Boolean) {
         if (isLoading) {

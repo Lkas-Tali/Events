@@ -1,13 +1,16 @@
 package com.student.events
 
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.NestedScrollView
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.tabs.TabLayout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
@@ -30,6 +33,14 @@ class MainActivity : AppCompatActivity() {
     private val attendingEvents = mutableListOf<Event>()
     private val notifications = mutableListOf<Notification>()
 
+    // --- FIX: Pagination variables restored ---
+    private val displayedEvents = mutableListOf<Event>()
+    private var currentDisplayedCount = 0
+    private val EVENTS_PER_PAGE = 4
+    private var isLoading = false
+    private var hasMoreEvents = true
+    // --- End of Fix ---
+
     private var currentUserId: String? = null
     private var currentTab = "discover"
 
@@ -44,12 +55,10 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Initialize Firebase
         auth = FirebaseAuth.getInstance()
         database = FirebaseDatabase.getInstance()
         currentUserId = auth.currentUser?.uid
 
-        // **Fix**: Check if user is logged in. If not, redirect to LoginActivity.
         if (currentUserId == null) {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
@@ -63,15 +72,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupViews() {
-        // Setup user info
         auth.currentUser?.let { user ->
             binding.userNameText.text = user.displayName ?: "User"
             binding.userEmailText.text = user.email
         }
 
-        // Setup RecyclerView
+        // --- FIX: Adapter now uses the displayedEvents list for pagination ---
         eventsAdapter = EventsAdapter(
-            events = allEvents,
+            events = displayedEvents,
             currentUserId = currentUserId ?: "",
             onEventClick = { event -> showEventDetails(event) },
             onEditClick = { event -> showEditEventDialog(event) },
@@ -80,66 +88,67 @@ class MainActivity : AppCompatActivity() {
             onCancelRsvpClick = { event -> showCancelRsvpDialog(event) }
         )
 
+        val layoutManager = GridLayoutManager(this@MainActivity, getSpanCount())
         binding.eventsRecyclerView.apply {
-            layoutManager = GridLayoutManager(this@MainActivity, getSpanCount())
+            this.layoutManager = layoutManager
             adapter = eventsAdapter
+            isNestedScrollingEnabled = false
         }
 
-        // Setup tabs
+        // --- FIX: Scroll listener now correctly references the binding property ---
+        binding.nestedScrollView.setOnScrollChangeListener(NestedScrollView.OnScrollChangeListener { v, _, scrollY, _, oldScrollY ->
+            if (v.getChildAt(v.childCount - 1) != null) {
+                if ((scrollY >= (v.getChildAt(v.childCount - 1).measuredHeight - v.measuredHeight)) &&
+                    scrollY > oldScrollY) {
+                    // Scrolled to bottom
+                    loadMoreEvents()
+                }
+            }
+        })
+        // --- End of Fix ---
+
         binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
-                when (tab?.position) {
-                    0 -> currentTab = "discover"
-                    1 -> currentTab = "myEvents"
-                    2 -> currentTab = "attending"
+                currentTab = when (tab?.position) {
+                    1 -> "myEvents"
+                    2 -> "attending"
+                    else -> "discover"
                 }
-                updateEventsList()
+                resetAndLoadEvents()
             }
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
             override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
 
-        // Setup search
         binding.searchEditText.addTextChangedListener { text ->
             searchQuery = text.toString()
-            updateEventsList()
+            resetAndLoadEvents()
         }
 
-        // Setup buttons
+        binding.locationFilterInput.addTextChangedListener { text ->
+            locationFilter = text.toString()
+            resetAndLoadEvents()
+        }
+
         binding.filterButton.setOnClickListener {
-            binding.filterPanel.visibility =
-                if (binding.filterPanel.visibility == View.VISIBLE) View.GONE
-                else View.VISIBLE
+            binding.filterPanel.visibility = if (binding.filterPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
         binding.createEventButton.setOnClickListener {
-            val intent = Intent(this, CreateEventActivity::class.java)
-            startActivityForResult(intent, CREATE_EVENT_REQUEST)
+            startActivityForResult(Intent(this, CreateEventActivity::class.java), CREATE_EVENT_REQUEST)
         }
 
-        binding.logoutButton.setOnClickListener {
-            showLogoutConfirmation()
-        }
+        binding.logoutButton.setOnClickListener { showLogoutConfirmation() }
 
-        binding.notificationBell.setOnClickListener {
-            showNotificationsBottomSheet()
-        }
+        binding.notificationBell.setOnClickListener { showNotificationsBottomSheet() }
 
-        // Setup filter inputs
-        binding.locationFilterInput.addTextChangedListener { text ->
-            locationFilter = text.toString()
-            updateEventsList()
-        }
-
-        binding.clearFiltersButton.setOnClickListener {
-            clearFilters()
-        }
+        binding.clearFiltersButton.setOnClickListener { clearFilters() }
 
         binding.startDateInput.setOnClickListener {
             showDatePicker { date ->
                 startDateFilter = date
                 binding.startDateInput.setText(SimpleDateFormat("dd/MM/yyyy", Locale.UK).format(date))
-                updateEventsList()
+                resetAndLoadEvents()
             }
         }
 
@@ -147,7 +156,7 @@ class MainActivity : AppCompatActivity() {
             showDatePicker { date ->
                 endDateFilter = date
                 binding.endDateInput.setText(SimpleDateFormat("dd/MM/yyyy", Locale.UK).format(date))
-                updateEventsList()
+                resetAndLoadEvents()
             }
         }
     }
@@ -155,7 +164,8 @@ class MainActivity : AppCompatActivity() {
     private fun getSpanCount(): Int {
         val displayMetrics = resources.displayMetrics
         val dpWidth = displayMetrics.widthPixels / displayMetrics.density
-        return (dpWidth / 300).toInt().coerceAtLeast(1)
+        val availableWidth = dpWidth - 32
+        return (availableWidth / 296).toInt().coerceAtLeast(1)
     }
 
     private fun loadUserData() {
@@ -164,7 +174,7 @@ class MainActivity : AppCompatActivity() {
                 .addListenerForSingleValueEvent(object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
                         val fullName = snapshot.child("fullName").getValue(String::class.java)
-                        binding.userNameText.text = fullName ?: auth.currentUser?.displayName
+                        binding.userNameText.text = fullName ?: auth.currentUser?.displayName ?: "User"
                     }
                     override fun onCancelled(error: DatabaseError) {}
                 })
@@ -172,6 +182,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadEvents() {
+        binding.loadingMoreLayout.visibility = View.VISIBLE
         database.reference.child("events")
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
@@ -184,25 +195,81 @@ class MainActivity : AppCompatActivity() {
                         event?.let {
                             it.id = eventSnapshot.key ?: ""
                             allEvents.add(it)
-
-                            // **Fix**: Use organizer.uid for comparison
-                            if (it.organizer?.uid == currentUserId) {
-                                myEvents.add(it)
-                            }
-
-                            if (it.attendees.containsKey(currentUserId)) {
-                                attendingEvents.add(it)
-                            }
+                            if (it.organizer?.uid == currentUserId) myEvents.add(it)
+                            if (it.attendees.containsKey(currentUserId)) attendingEvents.add(it)
                         }
                     }
 
-                    updateEventsList()
-                }
+                    sortEventsByDate(allEvents)
+                    sortEventsByDate(myEvents)
+                    sortEventsByDate(attendingEvents)
 
+                    resetAndLoadEvents()
+                }
                 override fun onCancelled(error: DatabaseError) {
+                    binding.loadingMoreLayout.visibility = View.GONE
                     Toast.makeText(this@MainActivity, "Failed to load events: ${error.message}", Toast.LENGTH_LONG).show()
                 }
             })
+    }
+
+    // --- FIX: Pagination logic functions are restored ---
+    private fun resetAndLoadEvents() {
+        displayedEvents.clear()
+        currentDisplayedCount = 0
+        hasMoreEvents = true
+        eventsAdapter.notifyDataSetChanged()
+        loadMoreEvents()
+    }
+
+    private fun loadMoreEvents() {
+        if (isLoading || !hasMoreEvents) return
+
+        isLoading = true
+        binding.loadingMoreLayout.visibility = View.VISIBLE
+
+        val sourceList = when (currentTab) {
+            "discover" -> allEvents
+            "myEvents" -> myEvents
+            "attending" -> attendingEvents
+            else -> emptyList()
+        }
+
+        val filteredList = filterEvents(sourceList)
+
+        val startIndex = currentDisplayedCount
+        val endIndex = (startIndex + EVENTS_PER_PAGE).coerceAtMost(filteredList.size)
+
+        if (startIndex < endIndex) {
+            val newEvents = filteredList.subList(startIndex, endIndex)
+            displayedEvents.addAll(newEvents)
+            eventsAdapter.notifyItemRangeInserted(startIndex, newEvents.size)
+            currentDisplayedCount += newEvents.size
+        }
+
+        hasMoreEvents = currentDisplayedCount < filteredList.size
+
+        updateEmptyState(displayedEvents.isEmpty())
+
+        binding.loadingMoreLayout.visibility = if (hasMoreEvents) View.VISIBLE else View.GONE
+        isLoading = false
+    }
+    // --- End of Fix ---
+
+    private fun sortEventsByDate(events: MutableList<Event>) {
+        events.sortBy { it.dateTime?.seconds ?: Long.MAX_VALUE }
+    }
+
+    private fun updateEmptyState(isEmpty: Boolean) {
+        binding.emptyStateText.visibility = if (isEmpty && !isLoading) View.VISIBLE else View.GONE
+        if(isEmpty) {
+            binding.emptyStateText.text = when (currentTab) {
+                "discover" -> "No events match your criteria."
+                "myEvents" -> "You haven't created any events."
+                "attending" -> "You are not attending any events."
+                else -> "No events available."
+            }
+        }
     }
 
     private fun loadNotifications() {
@@ -232,39 +299,16 @@ class MainActivity : AppCompatActivity() {
         binding.notificationBadge.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
     }
 
-    private fun updateEventsList() {
-        val filteredEvents = when (currentTab) {
-            "discover" -> filterEvents(allEvents)
-            "myEvents" -> filterEvents(myEvents) // Also filter myEvents and attending
-            "attending" -> filterEvents(attendingEvents)
-            else -> allEvents
-        }
-
-        eventsAdapter.updateEvents(filteredEvents)
-
-        binding.emptyStateText.visibility = if (filteredEvents.isEmpty()) View.VISIBLE else View.GONE
-        binding.emptyStateText.text = when (currentTab) {
-            "discover" -> "No events match your criteria."
-            "myEvents" -> "You haven't created any events."
-            "attending" -> "You are not attending any events."
-            else -> "No events available."
-        }
-    }
-
     private fun filterEvents(events: List<Event>): List<Event> {
         return events.filter { event ->
             val matchesSearch = searchQuery.isEmpty() ||
                     event.title.contains(searchQuery, ignoreCase = true) ||
                     event.description.contains(searchQuery, ignoreCase = true)
-
             val matchesLocation = locationFilter.isEmpty() ||
                     event.location.contains(locationFilter, ignoreCase = true)
-
-            // **Fix**: Convert dateTime seconds to a Date object for comparison
             val eventDate = event.dateTime?.seconds?.let { Date(it * 1000) }
             val matchesDateRange = (startDateFilter == null || eventDate?.after(startDateFilter) != false) &&
                     (endDateFilter == null || eventDate?.before(endDateFilter) != false)
-
             matchesSearch && matchesLocation && matchesDateRange
         }
     }
@@ -278,21 +322,18 @@ class MainActivity : AppCompatActivity() {
         binding.locationFilterInput.setText("")
         binding.startDateInput.setText("")
         binding.endDateInput.setText("")
-        updateEventsList()
+        resetAndLoadEvents()
     }
 
     private fun handleRsvp(event: Event) {
         currentUserId?.let { uid ->
             val currentUser = auth.currentUser
             val userName = currentUser?.displayName ?: "A User"
-
-            // **Fix**: Update the attendees map with an Attendee object
             val updates = hashMapOf<String, Any>(
                 "events/${event.id}/attendees/$uid/fullName" to userName,
                 "events/${event.id}/attendees/$uid/profileImageUrl" to (currentUser?.photoUrl?.toString() ?: ""),
                 "events/${event.id}/attendeesCount" to event.attendeesCount + 1
             )
-
             database.reference.updateChildren(updates)
                 .addOnSuccessListener {
                     Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
@@ -320,11 +361,16 @@ class MainActivity : AppCompatActivity() {
             putExtra("editMode", true)
             putExtra("eventId", event.id)
             putExtra("eventTitle", event.title)
-            // **Fix**: Pass seconds from dateTime object
-            putExtra("eventDateSeconds", event.dateTime?.seconds)
+            event.dateTime?.seconds?.let { seconds ->
+                val date = Date(seconds * 1000)
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val timeFormat = SimpleDateFormat("HH:mm", Locale.US)
+                putExtra("eventDate", dateFormat.format(date))
+                putExtra("eventTime", timeFormat.format(date))
+            }
             putExtra("eventLocation", event.location)
             putExtra("eventDescription", event.description)
-            putExtra("eventImageUrl", event.imageUrl)
+            putExtra("eventImage", event.imageUrl)
         }
         startActivityForResult(intent, EDIT_EVENT_REQUEST)
     }
@@ -333,9 +379,7 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Cancel Event")
             .setMessage("Are you sure you want to permanently cancel and delete \"${event.title}\"? This action cannot be undone.")
-            .setPositiveButton("Yes, Cancel Event") { _, _ ->
-                deleteEvent(event)
-            }
+            .setPositiveButton("Yes, Cancel Event") { _, _ -> deleteEvent(event) }
             .setNegativeButton("No", null)
             .show()
     }
@@ -344,48 +388,35 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Cancel RSVP")
             .setMessage("Are you sure you want to cancel your RSVP for \"${event.title}\"?")
-            .setPositiveButton("Yes, Cancel RSVP") { _, _ ->
-                cancelRsvp(event)
-            }
+            .setPositiveButton("Yes, Cancel RSVP") { _, _ -> cancelRsvp(event) }
             .setNegativeButton("No", null)
             .show()
     }
 
     private fun deleteEvent(event: Event) {
         database.reference.child("events").child(event.id).removeValue()
-            .addOnSuccessListener {
-                Toast.makeText(this, "Event deleted successfully", Toast.LENGTH_SHORT).show()
-            }
-            .addOnFailureListener {
-                Toast.makeText(this, "Failed to delete event", Toast.LENGTH_SHORT).show()
-            }
+            .addOnSuccessListener { Toast.makeText(this, "Event deleted successfully", Toast.LENGTH_SHORT).show() }
+            .addOnFailureListener { Toast.makeText(this, "Failed to delete event", Toast.LENGTH_SHORT).show() }
     }
 
     private fun cancelRsvp(event: Event) {
         currentUserId?.let { uid ->
             val updates = hashMapOf<String, Any?>(
                 "events/${event.id}/attendees/$uid" to null,
-                "events/${event.id}/attendeesCount" to event.attendeesCount - 1
+                "events/${event.id}/attendeesCount" to (event.attendeesCount - 1).coerceAtLeast(0)
             )
-
             database.reference.updateChildren(updates)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "RSVP cancelled", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Failed to cancel RSVP", Toast.LENGTH_SHORT).show()
-                }
+                .addOnSuccessListener { Toast.makeText(this, "RSVP cancelled", Toast.LENGTH_SHORT).show() }
+                .addOnFailureListener { Toast.makeText(this, "Failed to cancel RSVP", Toast.LENGTH_SHORT).show() }
         }
     }
 
     private fun showDatePicker(onDateSelected: (Date) -> Unit) {
         val calendar = Calendar.getInstance()
-        val dialog = android.app.DatePickerDialog(
-            this,
-            { _, year, month, dayOfMonth ->
-                calendar.set(year, month, dayOfMonth)
-                onDateSelected(calendar.time)
-            },
+        val dialog = android.app.DatePickerDialog(this, { _, year, month, dayOfMonth ->
+            calendar.set(year, month, dayOfMonth)
+            onDateSelected(calendar.time)
+        },
             calendar.get(Calendar.YEAR),
             calendar.get(Calendar.MONTH),
             calendar.get(Calendar.DAY_OF_MONTH)
@@ -408,7 +439,6 @@ class MainActivity : AppCompatActivity() {
                     updates["notifications/$uid/${notification.id}/read"] = true
                 }
             }
-
             if (updates.isNotEmpty()) {
                 database.reference.updateChildren(updates)
             }
@@ -416,13 +446,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createNotification(userId: String, type: String, text: String) {
-        val notification = mapOf(
-            "type" to type,
-            "text" to text,
-            "timestamp" to ServerValue.TIMESTAMP,
-            "read" to false
-        )
-
+        val notification = mapOf("type" to type, "text" to text, "timestamp" to ServerValue.TIMESTAMP, "read" to false)
         database.reference.child("notifications").child(userId).push().setValue(notification)
     }
 
@@ -447,12 +471,12 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Event created successfully!", Toast.LENGTH_SHORT).show()
                     binding.tabLayout.getTabAt(1)?.select()
                 }
-                EDIT_EVENT_REQUEST -> {
-                    Toast.makeText(this, "Event updated successfully!", Toast.LENGTH_SHORT).show()
-                }
+                EDIT_EVENT_REQUEST -> Toast.makeText(this, "Event updated successfully!", Toast.LENGTH_SHORT).show()
             }
         }
     }
+
+    private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
 
     companion object {
         private const val CREATE_EVENT_REQUEST = 1001
