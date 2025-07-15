@@ -43,6 +43,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        dataBinding = true  // Added for ProfileActivity
     }
     packaging {
         resources {
@@ -52,7 +53,6 @@ android {
 }
 
 dependencies {
-
     // Core Android libraries from your file
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -60,7 +60,7 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
 
-    // Material Design (v1.11.0 is needed for some components used)
+    // Material Design (v1.12.0 is already in your catalog)
     implementation(libs.material.v1120)
 
     // Added for Event list grid
@@ -82,4 +82,5 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
 }

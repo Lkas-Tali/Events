@@ -114,7 +114,6 @@ class MainActivity : AppCompatActivity() {
     private fun setupViews() {
         auth.currentUser?.let { user ->
             binding.userNameText.text = user.displayName ?: "User"
-            binding.userEmailText.text = user.email
         }
 
         eventsAdapter = EventsAdapter(
@@ -194,6 +193,10 @@ class MainActivity : AppCompatActivity() {
                 binding.endDateInput.setText(SimpleDateFormat("dd/MM/yyyy", Locale.UK).format(date))
                 resetAndLoadEvents()
             }
+        }
+
+        binding.profileAvatarFrame.setOnClickListener {
+            startActivity(ProfileActivity.newIntent(this))
         }
     }
 
@@ -333,9 +336,41 @@ class MainActivity : AppCompatActivity() {
                 .addListenerForSingleValueEvent(object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
                         val fullName = snapshot.child("fullName").getValue(String::class.java)
-                        binding.userNameText.text = fullName ?: auth.currentUser?.displayName ?: "User"
+                        val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java)
+
+                        // Extract first name only
+                        val firstName = fullName?.split(" ")?.firstOrNull() ?: auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
+
+                        // Update header UI - ONLY first name, NO email
+                        binding.userNameText.text = firstName
+
+                        // Load modern circular avatar
+                        if (!profileImageUrl.isNullOrEmpty()) {
+                            Glide.with(this@MainActivity)
+                                .load(profileImageUrl)
+                                .placeholder(R.drawable.circular_avatar)
+                                .error(R.drawable.circular_avatar)
+                                .circleCrop()
+                                .into(binding.userAvatarImage)
+                        } else {
+                            // Set circular background and default icon
+                            binding.userAvatarImage.setBackgroundResource(R.drawable.circular_avatar)
+                            binding.userAvatarImage.setImageResource(R.drawable.ic_person)
+                            binding.userAvatarImage.scaleType = ImageView.ScaleType.CENTER
+                            binding.userAvatarImage.setPadding(8, 8, 8, 8)
+                        }
                     }
-                    override fun onCancelled(error: DatabaseError) {}
+                    override fun onCancelled(error: DatabaseError) {
+                        // Fallback to auth user data
+                        val fallbackName = auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
+                        binding.userNameText.text = fallbackName
+
+                        // Set default avatar
+                        binding.userAvatarImage.setBackgroundResource(R.drawable.circular_avatar)
+                        binding.userAvatarImage.setImageResource(R.drawable.ic_person)
+                        binding.userAvatarImage.scaleType = ImageView.ScaleType.CENTER
+                        binding.userAvatarImage.setPadding(8, 8, 8, 8)
+                    }
                 })
         }
     }

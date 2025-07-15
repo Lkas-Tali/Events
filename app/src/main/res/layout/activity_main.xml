@@ -6,6 +6,7 @@
     android:layout_height="match_parent"
     android:background="#f8f9fa"
     tools:context=".MainActivity">
+
     <LinearLayout
         android:id="@+id/mainContent"
         android:layout_width="match_parent"
@@ -30,38 +31,38 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
+                <!-- App Logo & Title -->
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
+
                     <FrameLayout
                         android:layout_width="40dp"
                         android:layout_height="40dp"
                         android:background="@drawable/logo_background">
+
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
                             android:layout_gravity="center"
                             android:src="@drawable/ic_final_events_logo"
                             app:tint="@android:color/white" />
+
                     </FrameLayout>
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:text="Events"
-                        android:textColor="#1F2937"
-                        android:textSize="20sp"
-                        android:textStyle="bold" />
+
                 </LinearLayout>
 
+                <!-- Right Side: Notification + Avatar + User Info + Logout -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
+
+                    <!-- Notification Bell -->
                     <FrameLayout
                         android:id="@+id/notificationBell"
                         android:layout_width="40dp"
@@ -69,11 +70,13 @@
                         android:background="?attr/selectableItemBackgroundBorderless"
                         android:clickable="true"
                         android:focusable="true">
+
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
                             android:layout_gravity="center"
                             android:src="@drawable/ic_notifications" />
+
                         <View
                             android:id="@+id/notificationBadge"
                             android:layout_width="10dp"
@@ -83,34 +86,54 @@
                             android:layout_marginEnd="4dp"
                             android:background="@drawable/notification_badge"
                             android:visibility="gone" />
+
                     </FrameLayout>
-                    <LinearLayout
+
+                    <!-- Modern Professional Avatar -->
+                    <FrameLayout
+                        android:id="@+id/profileAvatarFrame"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="12dp"
+                        android:layout_marginEnd="12dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <!-- Outer ring for professional look -->
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/avatar_ring" />
+
+                        <!-- Inner avatar circle -->
+                        <ImageView
+                            android:id="@+id/userAvatarImage"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_gravity="center"
+                            android:background="@drawable/circular_avatar"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/ic_person" />
+
+                    </FrameLayout>
+
+                    <!-- User Name Only (No Email) -->
+                    <TextView
+                        android:id="@+id/userNameText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:gravity="end"
-                        android:orientation="vertical">
-                        <TextView
-                            android:id="@+id/userNameText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="John Doe"
-                            android:textColor="#1F2937"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
-                        <TextView
-                            android:id="@+id/userEmailText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="john.doe@example.com"
-                            android:textColor="#6B7280"
-                            android:textSize="12sp" />
-                    </LinearLayout>
+                        android:layout_marginEnd="16dp"
+                        android:text="John"
+                        android:textColor="@color/app_text_primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <!-- Logout Button -->
                     <Button
                         android:id="@+id/logoutButton"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:layout_marginStart="12dp"
                         android:background="@drawable/logout_button_bg"
                         android:minWidth="0dp"
                         android:paddingStart="12dp"
@@ -119,8 +142,11 @@
                         android:textAllCaps="false"
                         android:textColor="#6B7280"
                         android:textSize="13sp" />
+
                 </LinearLayout>
+
             </LinearLayout>
+
         </LinearLayout>
 
         <androidx.core.widget.NestedScrollView
@@ -154,6 +180,7 @@
                             android:layout_height="wrap_content"
                             android:gravity="center_vertical"
                             android:orientation="vertical">
+
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
@@ -161,17 +188,20 @@
                                 android:textColor="#1F2937"
                                 android:textSize="20sp"
                                 android:textStyle="bold" />
+
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="16dp"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal">
+
                                 <FrameLayout
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
                                     android:layout_marginEnd="8dp">
+
                                     <EditText
                                         android:id="@+id/searchEditText"
                                         android:layout_width="match_parent"
@@ -181,6 +211,7 @@
                                         android:paddingStart="36dp"
                                         android:paddingEnd="12dp"
                                         android:textSize="14sp" />
+
                                     <ImageView
                                         android:layout_width="16dp"
                                         android:layout_height="16dp"
@@ -188,7 +219,9 @@
                                         android:layout_marginStart="12dp"
                                         android:src="@drawable/ic_search"
                                         app:tint="#6B7280" />
+
                                 </FrameLayout>
+
                                 <Button
                                     android:id="@+id/filterButton"
                                     android:layout_width="wrap_content"
@@ -204,6 +237,7 @@
                                     android:textAllCaps="false"
                                     android:textColor="#374151"
                                     android:textSize="14sp" />
+
                                 <Button
                                     android:id="@+id/createEventButton"
                                     android:layout_width="wrap_content"
@@ -217,7 +251,9 @@
                                     android:textColor="@android:color/white"
                                     android:textSize="14sp"
                                     android:textStyle="bold" />
+
                             </LinearLayout>
+
                         </LinearLayout>
 
                         <LinearLayout
@@ -234,12 +270,14 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:orientation="horizontal">
+
                                 <LinearLayout
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
                                     android:layout_marginEnd="12dp"
                                     android:orientation="vertical">
+
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
@@ -247,6 +285,7 @@
                                         android:textColor="#6B7280"
                                         android:textSize="12sp"
                                         android:textStyle="bold" />
+
                                     <EditText
                                         android:id="@+id/locationFilterInput"
                                         android:layout_width="match_parent"
@@ -257,13 +296,16 @@
                                         android:paddingStart="12dp"
                                         android:paddingEnd="12dp"
                                         android:textSize="14sp" />
+
                                 </LinearLayout>
+
                                 <LinearLayout
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
                                     android:layout_marginEnd="12dp"
                                     android:orientation="vertical">
+
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
@@ -271,6 +313,7 @@
                                         android:textColor="#6B7280"
                                         android:textSize="12sp"
                                         android:textStyle="bold" />
+
                                     <EditText
                                         android:id="@+id/startDateInput"
                                         android:layout_width="match_parent"
@@ -283,12 +326,15 @@
                                         android:paddingStart="12dp"
                                         android:paddingEnd="12dp"
                                         android:textSize="14sp" />
+
                                 </LinearLayout>
+
                                 <LinearLayout
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
                                     android:orientation="vertical">
+
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
@@ -296,6 +342,7 @@
                                         android:textColor="#6B7280"
                                         android:textSize="12sp"
                                         android:textStyle="bold" />
+
                                     <EditText
                                         android:id="@+id/endDateInput"
                                         android:layout_width="match_parent"
@@ -308,8 +355,11 @@
                                         android:paddingStart="12dp"
                                         android:paddingEnd="12dp"
                                         android:textSize="14sp" />
+
                                 </LinearLayout>
+
                             </LinearLayout>
+
                             <Button
                                 android:id="@+id/clearFiltersButton"
                                 android:layout_width="wrap_content"
@@ -324,6 +374,7 @@
                                 android:textAllCaps="false"
                                 android:textColor="#374151"
                                 android:textSize="14sp" />
+
                         </LinearLayout>
 
                         <com.google.android.material.tabs.TabLayout
@@ -336,18 +387,22 @@
                             app:tabMode="fixed"
                             app:tabSelectedTextColor="@color/app_primary_blue"
                             app:tabTextColor="#6B7280">
+
                             <com.google.android.material.tabs.TabItem
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Discover" />
+
                             <com.google.android.material.tabs.TabItem
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="My Events" />
+
                             <com.google.android.material.tabs.TabItem
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Attending" />
+
                         </com.google.android.material.tabs.TabLayout>
 
                         <androidx.recyclerview.widget.RecyclerView
@@ -366,11 +421,13 @@
                             android:orientation="vertical"
                             android:padding="16dp"
                             android:visibility="gone">
+
                             <ProgressBar
                                 style="?android:attr/progressBarStyle"
                                 android:layout_width="36dp"
                                 android:layout_height="36dp"
                                 android:indeterminateTint="@color/app_primary_blue" />
+
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
@@ -378,6 +435,7 @@
                                 android:text="Loading more events..."
                                 android:textColor="#6B7280"
                                 android:textSize="14sp" />
+
                         </LinearLayout>
 
                         <TextView
@@ -391,10 +449,15 @@
                             android:textColor="#6B7280"
                             android:textSize="16sp"
                             android:visibility="gone" />
+
                     </LinearLayout>
+
                 </androidx.cardview.widget.CardView>
+
             </LinearLayout>
+
         </androidx.core.widget.NestedScrollView>
+
     </LinearLayout>
 
     <View
