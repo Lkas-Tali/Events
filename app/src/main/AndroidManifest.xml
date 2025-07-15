@@ -4,8 +4,22 @@
 
     <!-- This permission is required to connect to Firebase -->
     <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Permission for reading images from device storage -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+
+    <!-- Permission for camera access (for profile image capture) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Camera feature declaration - not required because users can also select from gallery -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+    <!-- Camera2 feature declaration for newer camera API -->
+    <uses-feature
+        android:name="android.hardware.camera2"
+        android:required="false" />
 
     <application
         android:allowBackup="true"

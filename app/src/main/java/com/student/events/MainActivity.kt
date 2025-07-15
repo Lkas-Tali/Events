@@ -6,6 +6,7 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -62,6 +63,20 @@ class MainActivity : AppCompatActivity() {
     private var startDateFilter: Date? = null
     private var endDateFilter: Date? = null
 
+    // REAL-TIME LISTENERS - Fixed type declarations
+    private var userDataListener: ValueEventListener? = null
+    private var userDataRef: DatabaseReference? = null
+    private var eventsListener: ValueEventListener? = null
+    private var eventsRef: DatabaseReference? = null
+    private var notificationsListener: ValueEventListener? = null
+    private var notificationsQuery: Query? = null // Changed from DatabaseReference to Query
+
+    companion object {
+        private const val TAG = "MainActivity"
+        private const val CREATE_EVENT_REQUEST = 1001
+        private const val EDIT_EVENT_REQUEST = 1002
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -77,7 +92,6 @@ class MainActivity : AppCompatActivity() {
         // This tells the system that the content behind the navigation bar is light, so the handle should be dark
         insetsController.isAppearanceLightNavigationBars = true
 
-
         auth = FirebaseAuth.getInstance()
         database = FirebaseDatabase.getInstance()
         currentUserId = auth.currentUser?.uid
@@ -90,9 +104,9 @@ class MainActivity : AppCompatActivity() {
 
         applySystemBarInsets()
         setupViews()
-        loadUserData()
-        loadEvents()
-        loadNotifications()
+
+        // Start real-time listeners
+        setupRealTimeListeners()
     }
 
     private fun applySystemBarInsets() {
@@ -110,12 +124,175 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // NEW: Setup all real-time listeners
+    private fun setupRealTimeListeners() {
+        Log.d(TAG, "Setting up real-time listeners")
+        setupUserDataListener()
+        setupEventsListener()
+        setupNotificationsListener()
+    }
 
-    private fun setupViews() {
-        auth.currentUser?.let { user ->
-            binding.userNameText.text = user.displayName ?: "User"
+    // NEW: Real-time user data listener
+    private fun setupUserDataListener() {
+        currentUserId?.let { uid ->
+            // Remove any existing listener first
+            userDataListener?.let { listener ->
+                userDataRef?.removeEventListener(listener)
+            }
+
+            Log.d(TAG, "Setting up user data listener for UID: $uid")
+            userDataRef = database.reference.child("users").child(uid)
+            userDataListener = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    try {
+                        val fullName = snapshot.child("fullName").getValue(String::class.java)
+                        val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java)
+
+                        Log.d(TAG, "User data updated - Name: $fullName, Image: ${!profileImageUrl.isNullOrEmpty()}")
+
+                        // Extract first name only
+                        val firstName = fullName?.split(" ")?.firstOrNull()
+                            ?: auth.currentUser?.displayName?.split(" ")?.firstOrNull()
+                            ?: "User"
+
+                        // Update header UI - ONLY first name, NO email
+                        binding.userNameText.text = firstName
+
+                        // Load modern circular avatar with real-time updates
+                        loadAvatarImage(profileImageUrl)
+
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error processing user data: ${e.message}", e)
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e(TAG, "Failed to load user data: ${error.message}")
+                    // Fallback to auth user data
+                    val fallbackName = auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
+                    binding.userNameText.text = fallbackName
+                    loadAvatarImage(null) // Load default avatar
+                }
+            }
+
+            // Attach the listener
+            userDataRef?.addValueEventListener(userDataListener!!)
+        }
+    }
+
+    // NEW: Real-time events listener
+    private fun setupEventsListener() {
+        // Remove any existing listener first
+        eventsListener?.let { listener ->
+            eventsRef?.removeEventListener(listener)
         }
 
+        Log.d(TAG, "Setting up events listener")
+        eventsRef = database.reference.child("events")
+        eventsListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                try {
+                    Log.d(TAG, "Events data updated")
+                    allEvents.clear()
+                    myEvents.clear()
+                    attendingEvents.clear()
+
+                    for (eventSnapshot in snapshot.children) {
+                        val event = eventSnapshot.getValue(Event::class.java)
+                        event?.let {
+                            it.id = eventSnapshot.key ?: ""
+                            allEvents.add(it)
+                            if (it.organizer?.uid == currentUserId) myEvents.add(it)
+                            if (it.attendees.containsKey(currentUserId)) attendingEvents.add(it)
+                        }
+                    }
+
+                    sortEventsByDate(allEvents)
+                    sortEventsByDate(myEvents)
+                    sortEventsByDate(attendingEvents)
+                    resetAndLoadEvents()
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error processing events data: ${e.message}", e)
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(TAG, "Failed to load events: ${error.message}")
+                binding.loadingMoreLayout.visibility = View.GONE
+                Toast.makeText(this@MainActivity, "Failed to load events: ${error.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        // Attach the listener
+        eventsRef?.addValueEventListener(eventsListener!!)
+    }
+
+    // NEW: Real-time notifications listener - FIXED TYPE ISSUE
+    private fun setupNotificationsListener() {
+        currentUserId?.let { uid ->
+            // Remove any existing listener first
+            notificationsListener?.let { listener ->
+                notificationsQuery?.removeEventListener(listener)
+            }
+
+            Log.d(TAG, "Setting up notifications listener for UID: $uid")
+            // Create the query and store it separately
+            notificationsQuery = database.reference.child("notifications").child(uid)
+                .orderByChild("timestamp")
+                .limitToLast(20)
+
+            notificationsListener = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    try {
+                        Log.d(TAG, "Notifications data updated")
+                        notifications.clear()
+                        for (notifSnapshot in snapshot.children) {
+                            val notification = notifSnapshot.getValue(Notification::class.java)
+                            notification?.let {
+                                it.id = notifSnapshot.key ?: ""
+                                notifications.add(0, it)
+                            }
+                        }
+                        updateNotificationBadge()
+
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error processing notifications data: ${e.message}", e)
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e(TAG, "Failed to load notifications: ${error.message}")
+                }
+            }
+
+            // Attach the listener to the query
+            notificationsQuery?.addValueEventListener(notificationsListener!!)
+        }
+    }
+
+    // NEW: Enhanced avatar loading function
+    private fun loadAvatarImage(profileImageUrl: String?) {
+        if (!profileImageUrl.isNullOrEmpty()) {
+            Log.d(TAG, "Loading avatar image from URL: $profileImageUrl")
+            Glide.with(this@MainActivity)
+                .load(profileImageUrl)
+                .placeholder(R.drawable.circular_avatar)
+                .error(R.drawable.circular_avatar)
+                .circleCrop()
+                .skipMemoryCache(false) // Allow caching for performance
+                .into(binding.userAvatarImage)
+        } else {
+            Log.d(TAG, "Loading default avatar")
+            // Set circular background and default icon
+            binding.userAvatarImage.setBackgroundResource(R.drawable.circular_avatar)
+            binding.userAvatarImage.setImageResource(R.drawable.ic_person)
+            binding.userAvatarImage.scaleType = ImageView.ScaleType.CENTER
+            binding.userAvatarImage.setPadding(8, 8, 8, 8)
+        }
+    }
+
+    private fun setupViews() {
         eventsAdapter = EventsAdapter(
             events = displayedEvents,
             currentUserId = currentUserId ?: "",
@@ -330,80 +507,6 @@ class MainActivity : AppCompatActivity() {
         return (availableWidth / 296).toInt().coerceAtLeast(1)
     }
 
-    private fun loadUserData() {
-        currentUserId?.let { uid ->
-            database.reference.child("users").child(uid)
-                .addListenerForSingleValueEvent(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        val fullName = snapshot.child("fullName").getValue(String::class.java)
-                        val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java)
-
-                        // Extract first name only
-                        val firstName = fullName?.split(" ")?.firstOrNull() ?: auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
-
-                        // Update header UI - ONLY first name, NO email
-                        binding.userNameText.text = firstName
-
-                        // Load modern circular avatar
-                        if (!profileImageUrl.isNullOrEmpty()) {
-                            Glide.with(this@MainActivity)
-                                .load(profileImageUrl)
-                                .placeholder(R.drawable.circular_avatar)
-                                .error(R.drawable.circular_avatar)
-                                .circleCrop()
-                                .into(binding.userAvatarImage)
-                        } else {
-                            // Set circular background and default icon
-                            binding.userAvatarImage.setBackgroundResource(R.drawable.circular_avatar)
-                            binding.userAvatarImage.setImageResource(R.drawable.ic_person)
-                            binding.userAvatarImage.scaleType = ImageView.ScaleType.CENTER
-                            binding.userAvatarImage.setPadding(8, 8, 8, 8)
-                        }
-                    }
-                    override fun onCancelled(error: DatabaseError) {
-                        // Fallback to auth user data
-                        val fallbackName = auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
-                        binding.userNameText.text = fallbackName
-
-                        // Set default avatar
-                        binding.userAvatarImage.setBackgroundResource(R.drawable.circular_avatar)
-                        binding.userAvatarImage.setImageResource(R.drawable.ic_person)
-                        binding.userAvatarImage.scaleType = ImageView.ScaleType.CENTER
-                        binding.userAvatarImage.setPadding(8, 8, 8, 8)
-                    }
-                })
-        }
-    }
-
-    private fun loadEvents() {
-        binding.loadingMoreLayout.visibility = View.VISIBLE
-        database.reference.child("events")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    allEvents.clear()
-                    myEvents.clear()
-                    attendingEvents.clear()
-                    for (eventSnapshot in snapshot.children) {
-                        val event = eventSnapshot.getValue(Event::class.java)
-                        event?.let {
-                            it.id = eventSnapshot.key ?: ""
-                            allEvents.add(it)
-                            if (it.organizer?.uid == currentUserId) myEvents.add(it)
-                            if (it.attendees.containsKey(currentUserId)) attendingEvents.add(it)
-                        }
-                    }
-                    sortEventsByDate(allEvents)
-                    sortEventsByDate(myEvents)
-                    sortEventsByDate(attendingEvents)
-                    resetAndLoadEvents()
-                }
-                override fun onCancelled(error: DatabaseError) {
-                    binding.loadingMoreLayout.visibility = View.GONE
-                    Toast.makeText(this@MainActivity, "Failed to load events: ${error.message}", Toast.LENGTH_LONG).show()
-                }
-            })
-    }
-
     private fun resetAndLoadEvents() {
         displayedEvents.clear()
         currentDisplayedCount = 0
@@ -453,31 +556,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadNotifications() {
-        currentUserId?.let { uid ->
-            database.reference.child("notifications").child(uid)
-                .orderByChild("timestamp")
-                .limitToLast(20)
-                .addValueEventListener(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        notifications.clear()
-                        for (notifSnapshot in snapshot.children) {
-                            val notification = notifSnapshot.getValue(Notification::class.java)
-                            notification?.let {
-                                it.id = notifSnapshot.key ?: ""
-                                notifications.add(0, it)
-                            }
-                        }
-                        updateNotificationBadge()
-                    }
-                    override fun onCancelled(error: DatabaseError) {}
-                })
-        }
-    }
-
     private fun updateNotificationBadge() {
         val unreadCount = notifications.count { !it.read }
         binding.notificationBadge.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
+        Log.d(TAG, "Notification badge updated: $unreadCount unread")
     }
 
     private fun filterEvents(events: List<Event>): List<Event> {
@@ -648,12 +730,44 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Logout")
             .setMessage("Are you sure you want to logout?")
             .setPositiveButton("Logout") { _, _ ->
+                // Clean up listeners before logout
+                cleanupListeners()
                 auth.signOut()
                 startActivity(Intent(this, LoginActivity::class.java))
                 finishAffinity()
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    // NEW: Clean up all listeners to prevent memory leaks - FIXED
+    private fun cleanupListeners() {
+        Log.d(TAG, "Cleaning up Firebase listeners")
+
+        userDataListener?.let { listener ->
+            userDataRef?.removeEventListener(listener)
+            userDataListener = null
+            userDataRef = null
+        }
+
+        eventsListener?.let { listener ->
+            eventsRef?.removeEventListener(listener)
+            eventsListener = null
+            eventsRef = null
+        }
+
+        notificationsListener?.let { listener ->
+            notificationsQuery?.removeEventListener(listener) // Fixed: use query instead of ref
+            notificationsListener = null
+            notificationsQuery = null
+        }
+    }
+
+    // NEW: Proper lifecycle management
+    override fun onDestroy() {
+        Log.d(TAG, "onDestroy called - cleaning up listeners")
+        cleanupListeners()
+        super.onDestroy()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -667,10 +781,5 @@ class MainActivity : AppCompatActivity() {
                 EDIT_EVENT_REQUEST -> Toast.makeText(this, "Event updated successfully!", Toast.LENGTH_SHORT).show()
             }
         }
-    }
-
-    companion object {
-        private const val CREATE_EVENT_REQUEST = 1001
-        private const val EDIT_EVENT_REQUEST = 1002
     }
 }

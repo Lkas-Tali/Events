@@ -55,4 +55,11 @@
 
     <!-- Filter panel background -->
     <color name="filter_panel_bg">#F9FAFB</color>
+
+    <!-- Additional colors for profile features -->
+    <color name="app_input_background">#F5F5F5</color>
+    <color name="app_success">#4CAF50</color>
+    <color name="app_accent">#FF9800</color>
+    <color name="app_divider">#E0E0E0</color>
+    <color name="info_text">#2196F3</color>
 </resources>
