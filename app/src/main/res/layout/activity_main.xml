@@ -45,11 +45,11 @@
                         android:background="@drawable/logo_background">
 
                         <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="42dp"
+                            android:layout_height="42dp"
                             android:layout_gravity="center"
                             android:src="@drawable/ic_final_events_logo"
-                            app:tint="@android:color/white" />
+                            />
 
                     </FrameLayout>
 

@@ -1,49 +1,78 @@
 <!-- res/drawable/ic_final_events_logo.xml -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="36"
-    android:viewportHeight="36">
+    android:width="85dp"
+    android:height="76dp"
+    android:viewportWidth="85"
+    android:viewportHeight="76">
 
-    <!-- Main calendar body -->
+    <!-- Light blue header background -->
     <path
-        android:strokeWidth="2"
-        android:strokeColor="#FFFFFFFF"
-        android:pathData="M7,8 L29,8 A3,3 0 0,1 32,11 L32,29 A3,3 0 0,1 29,32 L7,32 A3,3 0 0,1 4,29 L4,11 A3,3 0 0,1 7,8Z" />
+        android:fillColor="#A0C3FF"
+        android:pathData="M17.257,10.5 L53.536,10.5 L63.5,21.948 L63.5,32.464 L7,32.464 L7,21.098 Z" />
 
-    <!-- Top solid bar with opacity -->
+    <!-- Main calendar body (rounded rectangle with stroke) -->
     <path
-        android:fillColor="#4DFFFFFF"
-        android:pathData="M4,8h28v8h-28z" />
+        android:strokeWidth="5"
+        android:strokeColor="#0D47A1"
+        android:pathData="M19.719,13 L52.219,13 C58.846,13 64.219,18.674 64.219,25.673 L64.219,56.827 C64.219,63.826 58.846,69.5 52.219,69.5 L19.719,69.5 C13.091,69.5 7.719,63.826 7.719,56.827 L7.719,25.673 C7.719,18.674 13.091,13 19.719,13 Z" />
 
     <!-- Binder rings -->
     <path
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:strokeColor="#FFFFFFFF"
-        android:pathData="M10,4L10,12" />
+        android:strokeWidth="5"
+        android:strokeColor="#0D47A1"
+        android:pathData="M20.255,6.098 L20.161,21.598" />
     <path
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:strokeColor="#FFFFFFFF"
-        android:pathData="M26,4L26,12" />
+        android:strokeWidth="5"
+        android:strokeColor="#0D47A1"
+        android:pathData="M51.875,6.098 L51.781,21.598" />
 
-    <!-- Top row of dots (solid) -->
+    <!-- First row of dots (solid blue) -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M12,22m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+        android:fillColor="#0D47A1"
+        android:pathData="M23.75,43.34 m-3.938,0 a3.938,3.938 0,1 1,7.876 0 a3.938,3.938 0,1 1,-7.876 0" />
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M18,22m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+        android:fillColor="#0D47A1"
+        android:pathData="M35.969,43.34 m-3.938,0 a3.938,3.938 0,1 1,7.876 0 a3.938,3.938 0,1 1,-7.876 0" />
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M24,22m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+        android:fillColor="#0D47A1"
+        android:pathData="M48.188,43.34 m-3.938,0 a3.938,3.938 0,1 1,7.876 0 a3.938,3.938 0,1 1,-7.876 0" />
 
-    <!-- Bottom row of dots (opacity) -->
+    <!-- Second row of dots (light blue) -->
     <path
-        android:fillColor="#99FFFFFF"
-        android:pathData="M12,27m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+        android:fillColor="#A0C3FF"
+        android:pathData="M23.75,54.375 m-3.938,0 a3.938,3.938 0,1 1,7.876 0 a3.938,3.938 0,1 1,-7.876 0" />
     <path
-        android:fillColor="#99FFFFFF"
-        android:pathData="M18,27m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+        android:fillColor="#A0C3FF"
+        android:pathData="M35.969,54.375 m-3.938,0 a3.938,3.938 0,1 1,7.876 0 a3.938,3.938 0,1 1,-7.876 0" />
+
+    <!-- EVENTS text (vertical) -->
+    <!-- E -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M81.133,9.582 L70.423,9.583 L70.423,17.712 L72.403,17.712 L72.403,11.938 L75.028,11.938 L75.028,17.128 L76.858,17.128 L76.858,11.938 L79.153,11.938 L79.153,17.592 L81.133,17.592 Z" />
+
+    <!-- V -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M70.423,24.282 L81.133,27.837 L81.133,25.407 L73.603,22.993 L73.603,22.962 L81.133,20.577 L81.133,18.162 L70.423,21.628 Z" />
+
+    <!-- E -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M81.133,28.752 L70.423,28.752 L70.423,36.882 L72.403,36.882 L72.403,31.107 L75.028,31.107 L75.028,36.298 L76.858,36.298 L76.858,31.107 L79.153,31.107 L79.153,36.762 L81.133,36.762 Z" />
+
+    <!-- N -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M81.133,38.472 L70.423,38.472 L70.423,40.678 L77.593,40.678 L77.593,40.708 L70.423,45.163 L70.423,47.518 L81.133,47.518 L81.133,45.312 L73.948,45.312 L73.948,45.283 L81.133,40.812 Z" />
+
+    <!-- T -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M79.153,51.958 L70.423,51.958 L70.423,54.312 L79.153,54.312 L79.153,57.523 L81.133,57.523 L81.133,48.748 L79.153,48.748 Z" />
+
+    <!-- S -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M73.978,60.358 L73.978,58.077 Q72.988,58.062 72.268,58.438 Q71.548,58.812 71.083,59.45 Q70.618,60.088 70.4,60.92 Q70.183,61.753 70.183,62.638 Q70.183,63.733 70.438,64.565 Q70.693,65.397 71.15,65.96 Q71.608,66.522 72.238,66.808 Q72.868,67.092 73.603,67.092 Q74.503,67.092 75.08,66.71 Q75.658,66.327 76.003,65.802 Q76.348,65.278 76.505,64.745 Q76.663,64.213 76.723,63.913 Q76.978,62.908 77.143,62.285 Q77.308,61.663 77.473,61.31 Q77.638,60.958 77.833,60.838 Q78.028,60.717 78.343,60.717 Q78.688,60.717 78.913,60.868 Q79.138,61.018 79.288,61.25 Q79.438,61.483 79.498,61.768 Q79.558,62.053 79.558,62.338 Q79.558,62.772 79.483,63.14 Q79.408,63.507 79.228,63.792 Q79.048,64.077 78.733,64.25 Q78.418,64.423 77.938,64.452 L77.938,66.732 Q78.868,66.732 79.52,66.38 Q80.173,66.028 80.593,65.427 Q81.013,64.827 81.2,64.055 Q81.388,63.283 81.388,62.443 Q81.388,61.722 81.193,61.002 Q80.998,60.283 80.593,59.713 Q80.188,59.143 79.58,58.79 Q78.973,58.438 78.148,58.438 Q77.413,58.438 76.895,58.715 Q76.378,58.993 76.033,59.443 Q75.688,59.893 75.47,60.463 Q75.253,61.033 75.103,61.632 Q74.938,62.218 74.803,62.788 Q74.668,63.358 74.488,63.807 Q74.308,64.257 74.038,64.535 Q73.768,64.812 73.333,64.812 Q72.928,64.812 72.665,64.603 Q72.403,64.393 72.253,64.077 Q72.103,63.763 72.05,63.403 Q71.998,63.042 71.998,62.728 Q71.998,62.263 72.11,61.827 Q72.223,61.393 72.455,61.07 Q72.688,60.748 73.063,60.553 Q73.438,60.358 73.978,60.358 Z" />
 </vector>

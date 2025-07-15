@@ -21,7 +21,7 @@
             android:id="@+id/logo_card"
             android:layout_width="64dp"
             android:layout_height="64dp"
-            app:cardBackgroundColor="@color/app_primary_blue"
+            app:cardBackgroundColor="@color/test"
             app:cardCornerRadius="12dp"
             app:cardElevation="0dp"
             app:layout_constraintEnd_toEndOf="parent"
@@ -29,11 +29,11 @@
             app:layout_constraintTop_toTopOf="parent">
 
             <ImageView
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="70dp"
+                android:layout_height="70dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_final_events_logo"
-                app:tint="@android:color/white" />
+                />
         </androidx.cardview.widget.CardView>
 
 

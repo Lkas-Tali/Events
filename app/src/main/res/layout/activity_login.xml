@@ -15,8 +15,8 @@
     <!-- Logo: Uses the new, correct vector drawable. -->
     <ImageView
         android:id="@+id/logoImageView"
-        android:layout_width="64dp"
-        android:layout_height="64dp"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
         android:layout_marginBottom="16dp"
         android:background="@drawable/logo_background"
         android:padding="14dp"
@@ -24,7 +24,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:srcCompat="@drawable/ic_final_events_logo"
-        app:tint="@android:color/white"
         android:contentDescription="App Logo" />
 
     <!-- Title TextView for "Welcome Back" -->
