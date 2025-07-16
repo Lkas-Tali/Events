@@ -33,6 +33,9 @@ import com.student.events.adapters.EventsAdapter
 import com.student.events.databinding.ActivityMainBinding
 import com.student.events.models.Event
 import com.student.events.models.Notification
+import com.student.events.models.Organizer
+import com.student.events.models.DateTime
+import com.student.events.models.Attendee
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -50,9 +53,10 @@ class MainActivity : AppCompatActivity() {
 
     private val displayedEvents = mutableListOf<Event>()
     private var currentDisplayedCount = 0
-    private val EVENTS_PER_PAGE = 4
+    private val EVENTS_PER_PAGE = 8 // Increased to show more events at once
     private var isLoading = false
     private var hasMoreEvents = true
+    private var isDataLoaded = false // Flag to track if initial data is loaded
 
     private var currentUserId: String? = null
     private var currentTab = "discover"
@@ -63,13 +67,13 @@ class MainActivity : AppCompatActivity() {
     private var startDateFilter: Date? = null
     private var endDateFilter: Date? = null
 
-    // REAL-TIME LISTENERS - Fixed type declarations
+    // REAL-TIME LISTENERS
     private var userDataListener: ValueEventListener? = null
     private var userDataRef: DatabaseReference? = null
     private var eventsListener: ValueEventListener? = null
     private var eventsRef: DatabaseReference? = null
     private var notificationsListener: ValueEventListener? = null
-    private var notificationsQuery: Query? = null // Changed from DatabaseReference to Query
+    private var notificationsQuery: Query? = null
 
     companion object {
         private const val TAG = "MainActivity"
@@ -85,16 +89,16 @@ class MainActivity : AppCompatActivity() {
         // Enable edge-to-edge display
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // ADD: Programmatically control the system bar appearance
+        // Configure system bar appearance
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-        // This tells the system that the content behind the status bar is light, so icons should be dark
         insetsController.isAppearanceLightStatusBars = true
-        // This tells the system that the content behind the navigation bar is light, so the handle should be dark
         insetsController.isAppearanceLightNavigationBars = true
 
         auth = FirebaseAuth.getInstance()
         database = FirebaseDatabase.getInstance()
         currentUserId = auth.currentUser?.uid
+
+        Log.d(TAG, "onCreate - Current User ID: $currentUserId")
 
         if (currentUserId == null) {
             startActivity(Intent(this, LoginActivity::class.java))
@@ -104,6 +108,10 @@ class MainActivity : AppCompatActivity() {
 
         applySystemBarInsets()
         setupViews()
+
+        // Show initial loading state
+        binding.loadingMoreLayout.visibility = View.VISIBLE
+        binding.emptyStateText.visibility = View.GONE
 
         // Start real-time listeners
         setupRealTimeListeners()
@@ -124,7 +132,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Setup all real-time listeners
+    // Setup all real-time listeners
     private fun setupRealTimeListeners() {
         Log.d(TAG, "Setting up real-time listeners")
         setupUserDataListener()
@@ -132,7 +140,7 @@ class MainActivity : AppCompatActivity() {
         setupNotificationsListener()
     }
 
-    // NEW: Real-time user data listener
+    // Real-time user data listener
     private fun setupUserDataListener() {
         currentUserId?.let { uid ->
             // Remove any existing listener first
@@ -155,10 +163,10 @@ class MainActivity : AppCompatActivity() {
                             ?: auth.currentUser?.displayName?.split(" ")?.firstOrNull()
                             ?: "User"
 
-                        // Update header UI - ONLY first name, NO email
+                        // Update header UI
                         binding.userNameText.text = firstName
 
-                        // Load modern circular avatar with real-time updates
+                        // Load avatar
                         loadAvatarImage(profileImageUrl)
 
                     } catch (e: Exception) {
@@ -171,16 +179,15 @@ class MainActivity : AppCompatActivity() {
                     // Fallback to auth user data
                     val fallbackName = auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
                     binding.userNameText.text = fallbackName
-                    loadAvatarImage(null) // Load default avatar
+                    loadAvatarImage(null)
                 }
             }
 
-            // Attach the listener
             userDataRef?.addValueEventListener(userDataListener!!)
         }
     }
 
-    // NEW: Real-time events listener
+    // Real-time events listener - FIXED FOR PROPER LOADING
     private fun setupEventsListener() {
         // Remove any existing listener first
         eventsListener?.let { listener ->
@@ -189,46 +196,142 @@ class MainActivity : AppCompatActivity() {
 
         Log.d(TAG, "Setting up events listener")
         eventsRef = database.reference.child("events")
+
         eventsListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 try {
-                    Log.d(TAG, "Events data updated")
+                    Log.d(TAG, "Events data changed. Total events: ${snapshot.childrenCount}")
+
+                    // Clear lists
                     allEvents.clear()
                     myEvents.clear()
                     attendingEvents.clear()
 
+                    // Process each event
                     for (eventSnapshot in snapshot.children) {
-                        val event = eventSnapshot.getValue(Event::class.java)
-                        event?.let {
-                            it.id = eventSnapshot.key ?: ""
-                            allEvents.add(it)
-                            if (it.organizer?.uid == currentUserId) myEvents.add(it)
-                            if (it.attendees.containsKey(currentUserId)) attendingEvents.add(it)
+                        try {
+                            val eventId = eventSnapshot.key ?: continue
+                            Log.d(TAG, "Processing event with ID: $eventId")
+
+                            // Manual parsing to handle different data structures
+                            val event = parseEventFromSnapshot(eventSnapshot, eventId)
+
+                            if (event != null) {
+                                allEvents.add(event)
+                                Log.d(TAG, "Successfully added event: ${event.title}")
+
+                                // Categorize events
+                                if (event.organizer?.uid == currentUserId) {
+                                    myEvents.add(event)
+                                    Log.d(TAG, "Added to myEvents: ${event.title}")
+                                }
+                                if (event.attendees.containsKey(currentUserId)) {
+                                    attendingEvents.add(event)
+                                    Log.d(TAG, "Added to attendingEvents: ${event.title}")
+                                }
+                            } else {
+                                Log.e(TAG, "Failed to parse event: $eventId")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error parsing event ${eventSnapshot.key}: ${e.message}", e)
                         }
                     }
 
+                    Log.d(TAG, "Final counts - All: ${allEvents.size}, My: ${myEvents.size}, Attending: ${attendingEvents.size}")
+
+                    // Sort events by date
                     sortEventsByDate(allEvents)
                     sortEventsByDate(myEvents)
                     sortEventsByDate(attendingEvents)
+
+                    // Mark data as loaded
+                    isDataLoaded = true
+
+                    // Load events to display
                     resetAndLoadEvents()
 
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing events data: ${e.message}", e)
+                    Toast.makeText(this@MainActivity, "Error loading events: ${e.message}", Toast.LENGTH_LONG).show()
+                    binding.loadingMoreLayout.visibility = View.GONE
                 }
             }
 
             override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "Failed to load events: ${error.message}")
+                Log.e(TAG, "Failed to load events: ${error.code} - ${error.message}")
                 binding.loadingMoreLayout.visibility = View.GONE
-                Toast.makeText(this@MainActivity, "Failed to load events: ${error.message}", Toast.LENGTH_LONG).show()
+
+                val errorMessage = when (error.code) {
+                    DatabaseError.PERMISSION_DENIED -> "Permission denied. Please check your authentication."
+                    DatabaseError.NETWORK_ERROR -> "Network error. Please check your connection."
+                    else -> "Failed to load events: ${error.message}"
+                }
+                Toast.makeText(this@MainActivity, errorMessage, Toast.LENGTH_LONG).show()
             }
         }
 
-        // Attach the listener
         eventsRef?.addValueEventListener(eventsListener!!)
     }
 
-    // NEW: Real-time notifications listener - FIXED TYPE ISSUE
+    // Manual event parsing to handle different data structures
+    private fun parseEventFromSnapshot(snapshot: DataSnapshot, eventId: String): Event? {
+        return try {
+            val title = snapshot.child("title").getValue(String::class.java) ?: ""
+            val location = snapshot.child("location").getValue(String::class.java) ?: ""
+            val description = snapshot.child("description").getValue(String::class.java) ?: ""
+            val status = snapshot.child("status").getValue(String::class.java) ?: "upcoming"
+            val imageUrl = snapshot.child("imageUrl").getValue(String::class.java)
+            val attendeesCount = snapshot.child("attendeesCount").getValue(Int::class.java) ?: 0
+
+            // Parse organizer
+            val organizerSnapshot = snapshot.child("organizer")
+            val organizer = if (organizerSnapshot.exists()) {
+                Organizer(
+                    uid = organizerSnapshot.child("uid").getValue(String::class.java) ?: "",
+                    fullName = organizerSnapshot.child("fullName").getValue(String::class.java) ?: ""
+                )
+            } else null
+
+            // Parse dateTime
+            val dateTimeSnapshot = snapshot.child("dateTime")
+            val dateTime = if (dateTimeSnapshot.exists()) {
+                DateTime(
+                    seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L,
+                    nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
+                )
+            } else null
+
+            // Parse attendees
+            val attendeesMap = mutableMapOf<String, Attendee>()
+            val attendeesSnapshot = snapshot.child("attendees")
+            for (attendeeSnapshot in attendeesSnapshot.children) {
+                val attendeeId = attendeeSnapshot.key ?: continue
+                val attendee = Attendee(
+                    fullName = attendeeSnapshot.child("fullName").getValue(String::class.java) ?: "",
+                    profileImageUrl = attendeeSnapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+                )
+                attendeesMap[attendeeId] = attendee
+            }
+
+            Event(
+                id = eventId,
+                title = title,
+                location = location,
+                description = description,
+                organizer = organizer,
+                attendees = attendeesMap,
+                attendeesCount = attendeesCount,
+                status = status,
+                dateTime = dateTime,
+                imageUrl = imageUrl
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error manually parsing event: ${e.message}", e)
+            null
+        }
+    }
+
+    // Real-time notifications listener
     private fun setupNotificationsListener() {
         currentUserId?.let { uid ->
             // Remove any existing listener first
@@ -237,7 +340,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             Log.d(TAG, "Setting up notifications listener for UID: $uid")
-            // Create the query and store it separately
             notificationsQuery = database.reference.child("notifications").child(uid)
                 .orderByChild("timestamp")
                 .limitToLast(20)
@@ -245,7 +347,7 @@ class MainActivity : AppCompatActivity() {
             notificationsListener = object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     try {
-                        Log.d(TAG, "Notifications data updated")
+                        Log.d(TAG, "Notifications data updated. Count: ${snapshot.childrenCount}")
                         notifications.clear()
                         for (notifSnapshot in snapshot.children) {
                             val notification = notifSnapshot.getValue(Notification::class.java)
@@ -266,12 +368,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // Attach the listener to the query
             notificationsQuery?.addValueEventListener(notificationsListener!!)
         }
     }
 
-    // NEW: Enhanced avatar loading function
+    // Enhanced avatar loading function
     private fun loadAvatarImage(profileImageUrl: String?) {
         if (!profileImageUrl.isNullOrEmpty()) {
             Log.d(TAG, "Loading avatar image from URL: $profileImageUrl")
@@ -280,11 +381,10 @@ class MainActivity : AppCompatActivity() {
                 .placeholder(R.drawable.circular_avatar)
                 .error(R.drawable.circular_avatar)
                 .circleCrop()
-                .skipMemoryCache(false) // Allow caching for performance
+                .skipMemoryCache(false)
                 .into(binding.userAvatarImage)
         } else {
             Log.d(TAG, "Loading default avatar")
-            // Set circular background and default icon
             binding.userAvatarImage.setBackgroundResource(R.drawable.circular_avatar)
             binding.userAvatarImage.setImageResource(R.drawable.ic_person)
             binding.userAvatarImage.scaleType = ImageView.ScaleType.CENTER
@@ -308,12 +408,13 @@ class MainActivity : AppCompatActivity() {
             this.layoutManager = layoutManager
             adapter = eventsAdapter
             isNestedScrollingEnabled = false
+            setHasFixedSize(false)
         }
 
         binding.nestedScrollView.setOnScrollChangeListener(NestedScrollView.OnScrollChangeListener { v, _, scrollY, _, oldScrollY ->
             if (v.getChildAt(v.childCount - 1) != null) {
                 if ((scrollY >= (v.getChildAt(v.childCount - 1).measuredHeight - v.measuredHeight)) &&
-                    scrollY > oldScrollY) {
+                    scrollY > oldScrollY && isDataLoaded) {
                     loadMoreEvents()
                 }
             }
@@ -326,7 +427,10 @@ class MainActivity : AppCompatActivity() {
                     2 -> "attending"
                     else -> "discover"
                 }
-                resetAndLoadEvents()
+                Log.d(TAG, "Tab selected: $currentTab")
+                if (isDataLoaded) {
+                    resetAndLoadEvents()
+                }
             }
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
             override fun onTabReselected(tab: TabLayout.Tab?) {}
@@ -334,12 +438,16 @@ class MainActivity : AppCompatActivity() {
 
         binding.searchEditText.addTextChangedListener { text ->
             searchQuery = text.toString()
-            resetAndLoadEvents()
+            if (isDataLoaded) {
+                resetAndLoadEvents()
+            }
         }
 
         binding.locationFilterInput.addTextChangedListener { text ->
             locationFilter = text.toString()
-            resetAndLoadEvents()
+            if (isDataLoaded) {
+                resetAndLoadEvents()
+            }
         }
 
         binding.filterButton.setOnClickListener {
@@ -360,7 +468,9 @@ class MainActivity : AppCompatActivity() {
             showDatePicker { date ->
                 startDateFilter = date
                 binding.startDateInput.setText(SimpleDateFormat("dd/MM/yyyy", Locale.UK).format(date))
-                resetAndLoadEvents()
+                if (isDataLoaded) {
+                    resetAndLoadEvents()
+                }
             }
         }
 
@@ -368,12 +478,100 @@ class MainActivity : AppCompatActivity() {
             showDatePicker { date ->
                 endDateFilter = date
                 binding.endDateInput.setText(SimpleDateFormat("dd/MM/yyyy", Locale.UK).format(date))
-                resetAndLoadEvents()
+                if (isDataLoaded) {
+                    resetAndLoadEvents()
+                }
             }
         }
 
         binding.profileAvatarFrame.setOnClickListener {
             startActivity(ProfileActivity.newIntent(this))
+        }
+    }
+
+    private fun resetAndLoadEvents() {
+        if (!isDataLoaded) {
+            Log.d(TAG, "Data not loaded yet, skipping resetAndLoadEvents")
+            return
+        }
+
+        Log.d(TAG, "resetAndLoadEvents called for tab: $currentTab")
+        displayedEvents.clear()
+        currentDisplayedCount = 0
+        hasMoreEvents = true
+        eventsAdapter.notifyDataSetChanged()
+        loadMoreEvents()
+    }
+
+    private fun loadMoreEvents() {
+        if (isLoading || !hasMoreEvents || !isDataLoaded) return
+
+        isLoading = true
+        binding.loadingMoreLayout.visibility = View.VISIBLE
+
+        val sourceList = when (currentTab) {
+            "discover" -> allEvents
+            "myEvents" -> myEvents
+            "attending" -> attendingEvents
+            else -> emptyList()
+        }
+
+        Log.d(TAG, "Loading events from $currentTab tab. Source list size: ${sourceList.size}")
+
+        val filteredList = filterEvents(sourceList)
+        Log.d(TAG, "After filtering: ${filteredList.size} events")
+
+        val startIndex = currentDisplayedCount
+        val endIndex = (startIndex + EVENTS_PER_PAGE).coerceAtMost(filteredList.size)
+
+        if (startIndex < endIndex) {
+            val newEvents = filteredList.subList(startIndex, endIndex)
+            displayedEvents.addAll(newEvents)
+            eventsAdapter.notifyItemRangeInserted(startIndex, newEvents.size)
+            currentDisplayedCount += newEvents.size
+            Log.d(TAG, "Added ${newEvents.size} events. Total displayed: $currentDisplayedCount")
+        }
+
+        hasMoreEvents = currentDisplayedCount < filteredList.size
+        updateEmptyState(displayedEvents.isEmpty())
+        binding.loadingMoreLayout.visibility = if (hasMoreEvents && filteredList.size > currentDisplayedCount) View.VISIBLE else View.GONE
+        isLoading = false
+    }
+
+    private fun sortEventsByDate(events: MutableList<Event>) {
+        events.sortBy { it.dateTime?.seconds ?: Long.MAX_VALUE }
+    }
+
+    private fun updateEmptyState(isEmpty: Boolean) {
+        binding.emptyStateText.visibility = if (isEmpty && !isLoading && isDataLoaded) View.VISIBLE else View.GONE
+        if(isEmpty && isDataLoaded) {
+            binding.emptyStateText.text = when (currentTab) {
+                "discover" -> "No events to discover yet."
+                "myEvents" -> "You haven't created any events yet."
+                "attending" -> "You're not attending any events yet."
+                else -> "No events available."
+            }
+            Log.d(TAG, "Showing empty state: ${binding.emptyStateText.text}")
+        }
+    }
+
+    private fun updateNotificationBadge() {
+        val unreadCount = notifications.count { !it.read }
+        binding.notificationBadge.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
+        Log.d(TAG, "Notification badge updated: $unreadCount unread")
+    }
+
+    private fun filterEvents(events: List<Event>): List<Event> {
+        return events.filter { event ->
+            val matchesSearch = searchQuery.isEmpty() ||
+                    event.title.contains(searchQuery, ignoreCase = true) ||
+                    event.description.contains(searchQuery, ignoreCase = true)
+            val matchesLocation = locationFilter.isEmpty() ||
+                    event.location.contains(locationFilter, ignoreCase = true)
+            val eventDate = event.dateTime?.seconds?.let { Date(it * 1000) }
+            val matchesDateRange = (startDateFilter == null || eventDate?.after(startDateFilter) != false) &&
+                    (endDateFilter == null || eventDate?.before(endDateFilter) != false)
+            matchesSearch && matchesLocation && matchesDateRange
         }
     }
 
@@ -494,7 +692,7 @@ class MainActivity : AppCompatActivity() {
     private fun formatDateTime(event: Event): String {
         event.dateTime?.seconds?.let {
             val date = Date(it * 1000)
-            val displayFormat = SimpleDateFormat("EEEE, d MMMM HH:mm", Locale.UK)
+            val displayFormat = SimpleDateFormat("EEEE, d MMMM yyyy 'at' HH:mm", Locale.UK)
             return displayFormat.format(date)
         }
         return "Date and time not specified"
@@ -507,75 +705,6 @@ class MainActivity : AppCompatActivity() {
         return (availableWidth / 296).toInt().coerceAtLeast(1)
     }
 
-    private fun resetAndLoadEvents() {
-        displayedEvents.clear()
-        currentDisplayedCount = 0
-        hasMoreEvents = true
-        eventsAdapter.notifyDataSetChanged()
-        loadMoreEvents()
-    }
-
-    private fun loadMoreEvents() {
-        if (isLoading || !hasMoreEvents) return
-        isLoading = true
-        binding.loadingMoreLayout.visibility = View.VISIBLE
-        val sourceList = when (currentTab) {
-            "discover" -> allEvents
-            "myEvents" -> myEvents
-            "attending" -> attendingEvents
-            else -> emptyList()
-        }
-        val filteredList = filterEvents(sourceList)
-        val startIndex = currentDisplayedCount
-        val endIndex = (startIndex + EVENTS_PER_PAGE).coerceAtMost(filteredList.size)
-        if (startIndex < endIndex) {
-            val newEvents = filteredList.subList(startIndex, endIndex)
-            displayedEvents.addAll(newEvents)
-            eventsAdapter.notifyItemRangeInserted(startIndex, newEvents.size)
-            currentDisplayedCount += newEvents.size
-        }
-        hasMoreEvents = currentDisplayedCount < filteredList.size
-        updateEmptyState(displayedEvents.isEmpty())
-        binding.loadingMoreLayout.visibility = if (hasMoreEvents) View.VISIBLE else View.GONE
-        isLoading = false
-    }
-
-    private fun sortEventsByDate(events: MutableList<Event>) {
-        events.sortBy { it.dateTime?.seconds ?: Long.MAX_VALUE }
-    }
-
-    private fun updateEmptyState(isEmpty: Boolean) {
-        binding.emptyStateText.visibility = if (isEmpty && !isLoading) View.VISIBLE else View.GONE
-        if(isEmpty) {
-            binding.emptyStateText.text = when (currentTab) {
-                "discover" -> "No events match your criteria."
-                "myEvents" -> "You haven't created any events."
-                "attending" -> "You are not attending any events."
-                else -> "No events available."
-            }
-        }
-    }
-
-    private fun updateNotificationBadge() {
-        val unreadCount = notifications.count { !it.read }
-        binding.notificationBadge.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
-        Log.d(TAG, "Notification badge updated: $unreadCount unread")
-    }
-
-    private fun filterEvents(events: List<Event>): List<Event> {
-        return events.filter { event ->
-            val matchesSearch = searchQuery.isEmpty() ||
-                    event.title.contains(searchQuery, ignoreCase = true) ||
-                    event.description.contains(searchQuery, ignoreCase = true)
-            val matchesLocation = locationFilter.isEmpty() ||
-                    event.location.contains(locationFilter, ignoreCase = true)
-            val eventDate = event.dateTime?.seconds?.let { Date(it * 1000) }
-            val matchesDateRange = (startDateFilter == null || eventDate?.after(startDateFilter) != false) &&
-                    (endDateFilter == null || eventDate?.before(endDateFilter) != false)
-            matchesSearch && matchesLocation && matchesDateRange
-        }
-    }
-
     private fun clearFilters() {
         searchQuery = ""
         locationFilter = ""
@@ -585,32 +714,41 @@ class MainActivity : AppCompatActivity() {
         binding.locationFilterInput.setText("")
         binding.startDateInput.setText("")
         binding.endDateInput.setText("")
-        resetAndLoadEvents()
+        if (isDataLoaded) {
+            resetAndLoadEvents()
+        }
     }
 
     private fun handleRsvp(event: Event) {
         currentUserId?.let { uid ->
-            val currentUser = auth.currentUser
-            val userName = currentUser?.displayName ?: "A User"
-            val updates = hashMapOf<String, Any>(
-                "events/${event.id}/attendees/$uid/fullName" to userName,
-                "events/${event.id}/attendees/$uid/profileImageUrl" to (currentUser?.photoUrl?.toString() ?: ""),
-                "events/${event.id}/attendeesCount" to event.attendeesCount + 1
-            )
-            database.reference.updateChildren(updates)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
-                    event.organizer?.uid?.let { organizerId ->
-                        createNotification(
-                            organizerId,
-                            "rsvp",
-                            "${auth.currentUser?.displayName ?: "Someone"} accepted your invite to ${event.title}."
-                        )
+            // Get user data from Firebase to ensure we have the correct full name
+            database.reference.child("users").child(uid).get().addOnSuccessListener { snapshot ->
+                val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+                val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+
+                val updates = hashMapOf<String, Any>(
+                    "events/${event.id}/attendees/$uid/fullName" to fullName,
+                    "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
+                    "events/${event.id}/attendeesCount" to event.attendeesCount + 1
+                )
+
+                database.reference.updateChildren(updates)
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
+                        event.organizer?.uid?.let { organizerId ->
+                            createNotification(
+                                organizerId,
+                                "rsvp",
+                                "$fullName accepted your invite to ${event.title}."
+                            )
+                        }
                     }
-                }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Failed to RSVP", Toast.LENGTH_SHORT).show()
-                }
+                    .addOnFailureListener {
+                        Toast.makeText(this, "Failed to RSVP", Toast.LENGTH_SHORT).show()
+                    }
+            }.addOnFailureListener {
+                Toast.makeText(this, "Failed to get user data", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -740,7 +878,7 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // NEW: Clean up all listeners to prevent memory leaks - FIXED
+    // Clean up all listeners to prevent memory leaks
     private fun cleanupListeners() {
         Log.d(TAG, "Cleaning up Firebase listeners")
 
@@ -757,13 +895,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         notificationsListener?.let { listener ->
-            notificationsQuery?.removeEventListener(listener) // Fixed: use query instead of ref
+            notificationsQuery?.removeEventListener(listener)
             notificationsListener = null
             notificationsQuery = null
         }
     }
 
-    // NEW: Proper lifecycle management
+    // Proper lifecycle management
     override fun onDestroy() {
         Log.d(TAG, "onDestroy called - cleaning up listeners")
         cleanupListeners()

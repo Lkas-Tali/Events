@@ -25,4 +25,12 @@
     <string name="and">and</string>
     <string name="privacy_policy">Privacy Policy</string>
     <string name="already_have_an_account">Already have an account?</string>
+    <string name="email_required">Email address is required</string>
+    <string name="invalid_email">Please enter a valid email address</string>
+    <string name="no_account_found">No account found with this email address</string>
+    <string name="reset_email_failed">Failed to send reset email. Please try again.</string>
+    <string name="password_reset_sent">We\'ve sent a password reset link to %1$s</string>
+    <string name="network_error">Network error. Please check your internet connection.</string>
+    <string name="too_many_requests">Too many attempts. Please try again later.</string>
+    <string name="error_checking_email">Error checking email. Please try again.</string>
 </resources>

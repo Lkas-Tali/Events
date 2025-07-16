@@ -6,6 +6,7 @@ import android.util.Patterns
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.student.events.databinding.ActivitySignUpBinding
@@ -21,6 +22,16 @@ class SignUpActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySignUpBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Enable edge-to-edge display
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // AProgrammatically control the system bar appearance
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        // This tells the system that the content behind the status bar is light, so icons should be dark
+        insetsController.isAppearanceLightStatusBars = true
+        // This tells the system that the content behind the navigation bar is light, so the handle should be dark
+        insetsController.isAppearanceLightNavigationBars = true
 
         // Initialize Firebase Auth
         auth = FirebaseAuth.getInstance()

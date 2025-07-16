@@ -15,8 +15,9 @@
             android:layout_height="match_parent"
             android:orientation="vertical">
 
-            <!-- Header -->
+            <!-- Header - EXACTLY like MainActivity -->
             <LinearLayout
+                android:id="@+id/headerLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@android:color/white"
@@ -28,15 +29,18 @@
                 android:paddingBottom="8dp"
                 android:gravity="center_vertical">
 
-                <Button
+                <!-- ONLY FIXED: Back Button to show arrow properly -->
+                <ImageView
                     android:id="@+id/backButton"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
-                    android:background="@drawable/back_button_bg"
-                    android:drawableStart="@drawable/ic_arrow_back"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    app:backgroundTint="@null" />
+                    android:src="@drawable/ic_arrow_back"
+                    android:scaleType="center"
+                    android:padding="8dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    app:tint="@color/app_text_primary" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -52,6 +56,7 @@
 
             <!-- Scrollable Content -->
             <androidx.core.widget.NestedScrollView
+                android:id="@+id/nestedScrollView"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"

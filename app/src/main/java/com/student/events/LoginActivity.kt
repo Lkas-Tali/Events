@@ -12,6 +12,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
 import com.google.android.material.textfield.TextInputEditText
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
@@ -36,6 +37,16 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         // This line connects our Kotlin code to our XML layout file.
         setContentView(R.layout.activity_login)
+
+        // Enable edge-to-edge display
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // AProgrammatically control the system bar appearance
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        // This tells the system that the content behind the status bar is light, so icons should be dark
+        insetsController.isAppearanceLightStatusBars = true
+        // This tells the system that the content behind the navigation bar is light, so the handle should be dark
+        insetsController.isAppearanceLightNavigationBars = true
 
         // Initialize the FirebaseAuth instance.
         auth = Firebase.auth
@@ -71,11 +82,8 @@ class LoginActivity : AppCompatActivity() {
 
         // Set up the click listener for the "Forgot Password?" text.
         forgotPasswordTextView.setOnClickListener {
-            // We will create an Intent to navigate to the ForgotPasswordActivity.
-            // (You will need to create this activity and its layout later).
-            // val intent = Intent(this, ForgotPasswordActivity::class.java)
-            // startActivity(intent)
-            Toast.makeText(this, "Forgot Password screen not implemented yet.", Toast.LENGTH_SHORT).show()
+            val intent = Intent(this, ForgotPasswordActivity::class.java)
+            startActivity(intent)
         }
 
         // Set up the click listener for the "Sign up" layout.

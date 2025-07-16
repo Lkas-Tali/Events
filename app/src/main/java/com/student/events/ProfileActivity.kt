@@ -22,6 +22,10 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.databinding.DataBindingUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.bumptech.glide.Glide
@@ -79,6 +83,16 @@ class ProfileActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Enable edge-to-edge display - EXACTLY like MainActivity
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // EXACTLY like MainActivity - Programmatically control the system bar appearance
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        // This tells the system that the content behind the status bar is light, so icons should be dark
+        insetsController.isAppearanceLightStatusBars = true
+        // This tells the system that the content behind the navigation bar is light, so the handle should be dark
+        insetsController.isAppearanceLightNavigationBars = true
+
         try {
             // Initialize Firebase
             auth = FirebaseAuth.getInstance()
@@ -98,6 +112,9 @@ class ProfileActivity : AppCompatActivity() {
 
             Log.d(TAG, "ProfileActivity created successfully")
 
+            // EXACTLY like MainActivity - apply system bar insets
+            applySystemBarInsets()
+
             setupViews()
             setupRecyclerView()
             setupTabLayout()
@@ -110,9 +127,25 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    // COPIED EXACTLY from MainActivity
+    private fun applySystemBarInsets() {
+        val header = findViewById<View>(R.id.headerLayout)
+        ViewCompat.setOnApplyWindowInsetsListener(header) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.updatePadding(top = insets.top)
+            windowInsets
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.nestedScrollView) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.updatePadding(bottom = insets.bottom)
+            windowInsets
+        }
+    }
+
     private fun setupViews() {
         try {
-            // Back button
+            // Back button - now using ImageView
             binding.backButton.setOnClickListener {
                 finish()
             }
