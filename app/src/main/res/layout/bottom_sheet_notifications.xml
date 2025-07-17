@@ -3,87 +3,118 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:orientation="vertical"
     android:background="@android:color/white"
-    android:orientation="vertical">
+    android:paddingTop="8dp">
 
     <!-- Header -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp">
 
-        <View
-            android:layout_width="40dp"
-            android:layout_height="4dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="16dp"
-            android:background="@drawable/bottom_sheet_handle" />
-
+        <!-- Title -->
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/notificationsTitle"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginBottom="16dp"
+            android:layout_weight="1"
             android:text="Notifications"
-            android:textColor="#1F2937"
-            android:textSize="18sp"
+            android:textColor="@color/app_text_primary"
+            android:textSize="20sp"
             android:textStyle="bold" />
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#E5E7EB" />
-    </LinearLayout>
-
-    <!-- Notifications List -->
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:maxHeight="400dp">
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/notificationsRecyclerView"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/emptyStateText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:padding="40dp"
-            android:text="No new notifications"
-            android:textColor="#6B7280"
-            android:textSize="16sp" />
-    </FrameLayout>
-
-    <!-- Footer -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:padding="12dp">
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginBottom="12dp"
-            android:background="#E5E7EB" />
-
+        <!-- Mark All Read Button -->
         <TextView
             android:id="@+id/markAllReadButton"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
+            android:text="Mark all read"
+            android:textAllCaps="false"
+            android:textColor="@color/app_primary_blue"
+            android:textSize="12sp"
+            android:minWidth="80dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:gravity="center"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
+            android:focusable="true" />
+
+        <!-- Close Button -->
+        <ImageView
+            android:id="@+id/closeButton"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@drawable/ic_close"
+            android:scaleType="center"
+            android:padding="6dp"
+            android:clickable="true"
             android:focusable="true"
-            android:padding="8dp"
-            android:text="Mark all as read"
-            android:textColor="@color/app_primary_blue"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:background="?attr/selectableItemBackgroundBorderless"
+            app:tint="@color/app_text_secondary" />
+
     </LinearLayout>
+
+    <!-- Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/app_divider" />
+
+    <!-- Notifications List -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/notificationsRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxHeight="400dp"
+        android:scrollbars="vertical" />
+
+    <!-- Empty State -->
+    <LinearLayout
+        android:id="@+id/emptyStateLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="40dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_notifications"
+            android:layout_marginBottom="16dp"
+            app:tint="@color/app_text_tertiary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No notifications yet"
+            android:textColor="@color/app_text_secondary"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="You'll see notifications about events, invitations, and messages here"
+            android:textColor="@color/app_text_tertiary"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:lineSpacingExtra="2dp" />
+
+    </LinearLayout>
+
+    <!-- Bottom padding for better scrolling -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="16dp" />
+
 </LinearLayout>

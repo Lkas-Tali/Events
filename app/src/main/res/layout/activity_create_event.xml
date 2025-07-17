@@ -222,6 +222,134 @@
                             android:minLines="4" />
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <!-- INVITE PEOPLE SECTION -->
+                    <!-- Invite People Header (Collapsible) -->
+                    <LinearLayout
+                        android:id="@+id/invitePeopleHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="12dp"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:layout_marginBottom="16dp">
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_person_add"
+                            app:tint="@color/app_primary_blue"
+                            android:layout_marginEnd="12dp" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Invite People"
+                            android:textColor="@color/app_text_primary"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/inviteCountText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Optional"
+                            android:textColor="@color/app_text_secondary"
+                            android:textSize="12sp"
+                            android:layout_marginEnd="8dp" />
+
+                        <ImageView
+                            android:id="@+id/inviteArrow"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_expand_more"
+                            app:tint="@color/app_text_secondary" />
+
+                    </LinearLayout>
+
+                    <!-- Invite Section (Collapsible Content) -->
+                    <LinearLayout
+                        android:id="@+id/inviteSection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:layout_marginBottom="16dp"
+                        android:background="@color/app_secondary_bg"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Enter email addresses of people you want to invite"
+                            android:textColor="@color/app_text_secondary"
+                            android:textSize="14sp"
+                            android:layout_marginBottom="16dp" />
+
+                        <!-- Email Input Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="16dp">
+
+                            <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/emailInputLayout"
+                                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginEnd="8dp"
+                                android:hint="Enter email address">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/emailInput"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:inputType="textEmailAddress"
+                                    android:imeOptions="actionDone"
+                                    android:maxLines="1" />
+
+                            </com.google.android.material.textfield.TextInputLayout>
+
+                            <!-- Email Validation Icon -->
+                            <ImageView
+                                android:id="@+id/emailValidationIcon"
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_gravity="center_vertical"
+                                android:layout_marginEnd="8dp"
+                                android:visibility="gone" />
+
+                            <!-- Add Email Button -->
+                            <Button
+                                android:id="@+id/addEmailButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="48dp"
+                                android:text="Add"
+                                android:textAllCaps="false"
+                                android:textSize="14sp"
+                                app:backgroundTint="@color/app_primary_blue"
+                                android:textColor="@android:color/white"
+                                android:minWidth="64dp"
+                                android:paddingStart="16dp"
+                                android:paddingEnd="16dp" />
+
+                        </LinearLayout>
+
+                        <!-- Invited Users Chips -->
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/invitedUsersChipGroup"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            app:chipSpacing="8dp"
+                            app:lineSpacing="4dp" />
+
+                    </LinearLayout>
+
                     <!-- Divider -->
                     <View
                         android:layout_width="match_parent"

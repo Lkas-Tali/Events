@@ -12,11 +12,14 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
+import android.widget.Button
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -28,6 +31,7 @@ import com.bumptech.glide.Glide
 import com.google.android.material.tabs.TabLayout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
+import com.google.firebase.database.ServerValue
 import com.google.firebase.storage.FirebaseStorage
 import com.student.events.adapters.EventsAdapter
 import com.student.events.databinding.ActivityMainBinding
@@ -38,8 +42,6 @@ import com.student.events.models.DateTime
 import com.student.events.models.Attendee
 import java.text.SimpleDateFormat
 import java.util.*
-import android.widget.LinearLayout
-import androidx.core.content.ContextCompat
 
 
 class MainActivity : AppCompatActivity() {
@@ -295,14 +297,8 @@ class MainActivity : AppCompatActivity() {
                 )
             } else null
 
-            // Parse dateTime
-            val dateTimeSnapshot = snapshot.child("dateTime")
-            val dateTime = if (dateTimeSnapshot.exists()) {
-                DateTime(
-                    seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L,
-                    nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
-                )
-            } else null
+            // COMPATIBILITY: Parse dateTime (handle both old and new formats)
+            val dateTime = parseDateTime(snapshot)
 
             // Parse attendees
             val attendeesMap = mutableMapOf<String, Attendee>()
@@ -330,6 +326,37 @@ class MainActivity : AppCompatActivity() {
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error manually parsing event: ${e.message}", e)
+            null
+        }
+    }
+
+    private fun parseDateTime(snapshot: DataSnapshot): DateTime? {
+        return try {
+            // Try new format first
+            val dateTimeSnapshot = snapshot.child("dateTime")
+            if (dateTimeSnapshot.exists()) {
+                DateTime(
+                    seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L,
+                    nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
+                )
+            } else {
+                // Fall back to old format - convert to new format for consistency
+                val dateString = snapshot.child("date").getValue(String::class.java)
+                val timeString = snapshot.child("time").getValue(String::class.java)
+
+                if (!dateString.isNullOrEmpty() && !timeString.isNullOrEmpty()) {
+                    val format = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+                    val date = format.parse("$dateString $timeString")
+                    if (date != null) {
+                        DateTime(
+                            seconds = date.time / 1000,
+                            nanoseconds = 0L
+                        )
+                    } else null
+                } else null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing dateTime: ${e.message}", e)
             null
         }
     }
@@ -607,7 +634,7 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.descriptionText).text = event.description
         view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
 
-        // UPDATED: Handle organizer section with click functionality
+        // Handle organizer section
         val organizerText = view.findViewById<TextView>(R.id.organizerText)
         val organizerClickableSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
         val organizerHintText = view.findViewById<TextView>(R.id.organizerHintText)
@@ -616,43 +643,201 @@ class MainActivity : AppCompatActivity() {
         val organizerName = event.organizer?.fullName ?: "Unknown"
         organizerText.text = organizerName
 
-        // Make organizer section clickable only if it's not the current user
         val organizerUid = event.organizer?.uid
         if (organizerUid != null && organizerUid != currentUserId) {
             organizerClickableSection.setOnClickListener {
-                Log.d(TAG, "Opening profile for organizer: $organizerName ($organizerUid)")
-
-                // Close current event details first
                 animateDetailsOut(view)
-
-                // Open public profile after a short delay
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     val intent = PublicProfileActivity.newIntent(this@MainActivity, organizerUid, organizerName)
                     startActivity(intent)
-                }, 300) // Small delay to let the details close smoothly
+                }, 300)
             }
-
-            // Keep the clickable styling and show hint
             organizerClickableSection.isClickable = true
             organizerClickableSection.isFocusable = true
             organizerHintText.visibility = View.VISIBLE
             organizerArrow.visibility = View.VISIBLE
         } else {
-            // Remove clickable styling if it's the current user's own event
             organizerClickableSection.setOnClickListener(null)
             organizerClickableSection.isClickable = false
             organizerClickableSection.isFocusable = false
             organizerClickableSection.background = null
 
-            // Update text to indicate it's their own event
             if (organizerUid == currentUserId) {
                 organizerText.text = "$organizerName (You)"
                 organizerText.setTextColor(resources.getColor(R.color.app_text_secondary, null))
             }
-
-            // Hide the hint and arrow for own events
             organizerHintText.visibility = View.GONE
             organizerArrow.visibility = View.GONE
+        }
+
+        // NEW: Handle invitation status and buttons
+        currentUserId?.let { uid ->
+            checkAndUpdateInvitationStatus(view, event, uid)
+        }
+    }
+
+    private fun checkAndUpdateInvitationStatus(view: View, event: Event, userId: String) {
+        // Check if user was invited to this event
+        database.reference.child("events").child(event.id).child("invitations").child(userId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val actionButton = view.findViewById<Button>(R.id.actionButton)
+                    val secondaryButton = view.findViewById<Button>(R.id.secondaryButton)
+
+                    if (snapshot.exists()) {
+                        // User was invited
+                        val invitationStatus = snapshot.child("status").getValue(String::class.java) ?: "pending"
+
+                        when (invitationStatus) {
+                            "pending" -> {
+                                // Show Accept/Decline buttons
+                                actionButton.text = "Accept Invitation"
+                                actionButton.setBackgroundColor(resources.getColor(R.color.app_success, null))
+                                actionButton.setOnClickListener { acceptInvitation(event, userId) }
+                                actionButton.visibility = View.VISIBLE
+
+                                secondaryButton.text = "Decline"
+                                secondaryButton.setBackgroundColor(resources.getColor(R.color.app_error, null))
+                                secondaryButton.setOnClickListener { declineInvitation(event, userId) }
+                                secondaryButton.visibility = View.VISIBLE
+                            }
+                            "accepted" -> {
+                                // Show that invitation was accepted, allow to cancel RSVP
+                                actionButton.text = "Cancel RSVP"
+                                actionButton.setBackgroundColor(resources.getColor(R.color.app_error, null))
+                                actionButton.setOnClickListener { showCancelRsvpDialog(event) }
+                                actionButton.visibility = View.VISIBLE
+                                secondaryButton.visibility = View.GONE
+                            }
+                            "declined" -> {
+                                // Show option to accept invitation again
+                                actionButton.text = "Accept Invitation"
+                                actionButton.setBackgroundColor(resources.getColor(R.color.app_success, null))
+                                actionButton.setOnClickListener { acceptInvitation(event, userId) }
+                                actionButton.visibility = View.VISIBLE
+                                secondaryButton.visibility = View.GONE
+                            }
+                        }
+                    } else {
+                        // User not invited, show regular RSVP/Cancel buttons
+                        if (event.attendees.containsKey(userId)) {
+                            actionButton.text = "Cancel RSVP"
+                            actionButton.setBackgroundColor(resources.getColor(R.color.app_error, null))
+                            actionButton.setOnClickListener { showCancelRsvpDialog(event) }
+                        } else {
+                            actionButton.text = "RSVP"
+                            actionButton.setBackgroundColor(resources.getColor(R.color.app_primary_blue, null))
+                            actionButton.setOnClickListener { handleRsvp(event) }
+                        }
+                        actionButton.visibility = View.VISIBLE
+                        secondaryButton.visibility = View.GONE
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    // Handle error silently, show default RSVP button
+                    val actionButton = view.findViewById<Button>(R.id.actionButton)
+                    actionButton.text = "RSVP"
+                    actionButton.setBackgroundColor(resources.getColor(R.color.app_primary_blue, null))
+                    actionButton.setOnClickListener { handleRsvp(event) }
+                    actionButton.visibility = View.VISIBLE
+                }
+            })
+    }
+
+    // NEW: Accept invitation
+    private fun acceptInvitation(event: Event, userId: String) {
+        // Get user data first
+        database.reference.child("users").child(userId).get().addOnSuccessListener { snapshot ->
+            val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+            val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+
+            val updates = hashMapOf<String, Any>(
+                // Update invitation status
+                "events/${event.id}/invitations/$userId/status" to "accepted",
+                "events/${event.id}/invitations/$userId/respondedAt" to ServerValue.TIMESTAMP,
+
+                // Add to attendees
+                "events/${event.id}/attendees/$userId/fullName" to fullName,
+                "events/${event.id}/attendees/$userId/profileImageUrl" to profileImageUrl,
+                "events/${event.id}/attendeesCount" to event.attendeesCount + 1,
+
+                // Update user's invitations
+                "users/$userId/invitations/${event.id}/status" to "accepted",
+                "users/$userId/invitations/${event.id}/respondedAt" to ServerValue.TIMESTAMP
+            )
+
+            database.reference.updateChildren(updates)
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Invitation accepted! You're now attending \"${event.title}\"", Toast.LENGTH_SHORT).show()
+
+                    // Notify organizer using existing notification structure
+                    event.organizer?.uid?.let { organizerId ->
+                        createInvitationNotification(
+                            organizerId,
+                            "invitation_accepted",
+                            "$fullName accepted your invitation to ${event.title}.",
+                            event.id,
+                            event.title
+                        )
+                    }
+                }
+                .addOnFailureListener {
+                    Toast.makeText(this, "Failed to accept invitation", Toast.LENGTH_SHORT).show()
+                }
+        }.addOnFailureListener {
+            Toast.makeText(this, "Failed to get user data", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun createInvitationNotification(userId: String, type: String, text: String, eventId: String? = null, eventTitle: String? = null) {
+        val notification = mutableMapOf<String, Any>(
+            "type" to type,
+            "text" to text,
+            "timestamp" to ServerValue.TIMESTAMP,
+            "read" to false
+        )
+
+        // Add additional fields for invitation-related notifications
+        eventId?.let { notification["eventId"] = it }
+        eventTitle?.let { notification["eventTitle"] = it }
+
+        database.reference.child("notifications").child(userId).push().setValue(notification)
+    }
+
+    // NEW: Decline invitation
+    private fun declineInvitation(event: Event, userId: String) {
+        database.reference.child("users").child(userId).get().addOnSuccessListener { snapshot ->
+            val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+
+            val updates = hashMapOf<String, Any>(
+                // Update invitation status
+                "events/${event.id}/invitations/$userId/status" to "declined",
+                "events/${event.id}/invitations/$userId/respondedAt" to ServerValue.TIMESTAMP,
+
+                // Update user's invitations
+                "users/$userId/invitations/${event.id}/status" to "declined",
+                "users/$userId/invitations/${event.id}/respondedAt" to ServerValue.TIMESTAMP
+            )
+
+            database.reference.updateChildren(updates)
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Invitation declined", Toast.LENGTH_SHORT).show()
+
+                    // Notify organizer using existing notification structure
+                    event.organizer?.uid?.let { organizerId ->
+                        createInvitationNotification(
+                            organizerId,
+                            "invitation_declined",
+                            "$fullName declined your invitation to ${event.title}.",
+                            event.id,
+                            event.title
+                        )
+                    }
+                }
+                .addOnFailureListener {
+                    Toast.makeText(this, "Failed to decline invitation", Toast.LENGTH_SHORT).show()
+                }
         }
     }
 
@@ -771,34 +956,51 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleRsvp(event: Event) {
         currentUserId?.let { uid ->
-            // Get user data from Firebase to ensure we have the correct full name
-            database.reference.child("users").child(uid).get().addOnSuccessListener { snapshot ->
-                val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
-                val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+            // Check if this is an invitation response
+            database.reference.child("events").child(event.id).child("invitations").child(uid)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        if (snapshot.exists()) {
+                            // This is responding to an invitation
+                            acceptInvitation(event, uid)
+                        } else {
+                            // Regular RSVP
+                            database.reference.child("users").child(uid).get().addOnSuccessListener { userSnapshot ->
+                                val fullName = userSnapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+                                val profileImageUrl = userSnapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
 
-                val updates = hashMapOf<String, Any>(
-                    "events/${event.id}/attendees/$uid/fullName" to fullName,
-                    "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
-                    "events/${event.id}/attendeesCount" to event.attendeesCount + 1
-                )
+                                val updates = hashMapOf<String, Any>(
+                                    "events/${event.id}/attendees/$uid/fullName" to fullName,
+                                    "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
+                                    "events/${event.id}/attendeesCount" to event.attendeesCount + 1
+                                )
 
-                database.reference.updateChildren(updates)
-                    .addOnSuccessListener {
-                        Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
-                        event.organizer?.uid?.let { organizerId ->
-                            createNotification(
-                                organizerId,
-                                "rsvp",
-                                "$fullName accepted your invite to ${event.title}."
-                            )
+                                database.reference.updateChildren(updates)
+                                    .addOnSuccessListener {
+                                        Toast.makeText(this@MainActivity, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
+
+                                        // Notify organizer using enhanced notification
+                                        event.organizer?.uid?.let { organizerId ->
+                                            createInvitationNotification(
+                                                organizerId,
+                                                "rsvp",
+                                                "$fullName accepted your invite to ${event.title}.",
+                                                event.id,
+                                                event.title
+                                            )
+                                        }
+                                    }
+                                    .addOnFailureListener {
+                                        Toast.makeText(this@MainActivity, "Failed to RSVP", Toast.LENGTH_SHORT).show()
+                                    }
+                            }
                         }
                     }
-                    .addOnFailureListener {
-                        Toast.makeText(this, "Failed to RSVP", Toast.LENGTH_SHORT).show()
+
+                    override fun onCancelled(error: DatabaseError) {
+                        Toast.makeText(this@MainActivity, "Error processing RSVP", Toast.LENGTH_SHORT).show()
                     }
-            }.addOnFailureListener {
-                Toast.makeText(this, "Failed to get user data", Toast.LENGTH_SHORT).show()
-            }
+                })
         }
     }
 
@@ -909,8 +1111,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createNotification(userId: String, type: String, text: String) {
-        val notification = mapOf("type" to type, "text" to text, "timestamp" to ServerValue.TIMESTAMP, "read" to false)
-        database.reference.child("notifications").child(userId).push().setValue(notification)
+        createInvitationNotification(userId, type, text)
     }
 
     private fun showLogoutConfirmation() {

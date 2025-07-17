@@ -9,18 +9,18 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.core.widget.addTextChangedListener
 import com.bumptech.glide.Glide
+import com.google.android.material.chip.Chip
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
+import com.google.firebase.database.*
 import com.google.firebase.storage.FirebaseStorage
 import com.student.events.databinding.ActivityCreateEventBinding
 import java.io.ByteArrayOutputStream
@@ -42,6 +42,17 @@ class CreateEventActivity : AppCompatActivity() {
     private var isEditMode = false
     private var eventId: String? = null
     private var existingImageUrl: String? = null
+
+    // Invitation variables
+    private val invitedUsers = mutableMapOf<String, InvitedUser>() // email -> InvitedUser
+    private var isCheckingEmail = false
+
+    data class InvitedUser(
+        val email: String,
+        val fullName: String,
+        val userId: String,
+        val profileImageUrl: String? = null
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,6 +81,7 @@ class CreateEventActivity : AppCompatActivity() {
         applySystemBarInsets()
 
         setupViews()
+        setupInvitationFeature()
     }
 
     // COPIED EXACTLY from MainActivity
@@ -94,14 +106,28 @@ class CreateEventActivity : AppCompatActivity() {
 
         eventId = intent.getStringExtra("eventId")
         binding.titleInput.setText(intent.getStringExtra("eventTitle"))
-        selectedDate = intent.getStringExtra("eventDate") ?: ""
-        selectedTime = intent.getStringExtra("eventTime") ?: ""
         binding.locationInput.setText(intent.getStringExtra("eventLocation"))
         binding.descriptionInput.setText(intent.getStringExtra("eventDescription"))
         existingImageUrl = intent.getStringExtra("eventImage")
 
-        binding.dateInput.setText(formatDateForDisplay(selectedDate))
-        binding.timeInput.setText(selectedTime)
+        // COMPATIBILITY: Load date/time from database to handle both formats
+        eventId?.let { id ->
+            database.reference.child("events").child(id)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        loadExistingDateTime(snapshot)
+                        binding.dateInput.setText(formatDateForDisplay(selectedDate))
+                        binding.timeInput.setText(selectedTime)
+                    }
+                    override fun onCancelled(error: DatabaseError) {
+                        // Use fallback values from intent if available
+                        selectedDate = intent.getStringExtra("eventDate") ?: ""
+                        selectedTime = intent.getStringExtra("eventTime") ?: ""
+                        binding.dateInput.setText(formatDateForDisplay(selectedDate))
+                        binding.timeInput.setText(selectedTime)
+                    }
+                })
+        }
 
         existingImageUrl?.let { url ->
             if (url.isNotEmpty()) {
@@ -112,6 +138,9 @@ class CreateEventActivity : AppCompatActivity() {
                     .into(binding.imagePreview)
             }
         }
+
+        // Load existing invitations if in edit mode
+        loadExistingInvitations()
     }
 
     private fun setupViews() {
@@ -127,6 +156,173 @@ class CreateEventActivity : AppCompatActivity() {
                 handleEventCreationOrUpdate()
             }
         }
+    }
+
+    private fun setupInvitationFeature() {
+        // Toggle invite section visibility
+        binding.invitePeopleHeader.setOnClickListener {
+            val isVisible = binding.inviteSection.visibility == View.VISIBLE
+            binding.inviteSection.visibility = if (isVisible) View.GONE else View.VISIBLE
+            binding.inviteArrow.rotation = if (isVisible) 0f else 180f
+        }
+
+        // Clear email input error when user starts typing
+        binding.emailInput.addTextChangedListener {
+            binding.emailInputLayout.error = null
+            binding.emailValidationIcon.visibility = View.GONE
+        }
+
+        // Handle email input
+        binding.emailInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                val email = binding.emailInput.text.toString().trim()
+                if (email.isNotEmpty()) {
+                    validateAndAddEmail(email)
+                }
+                true
+            } else {
+                false
+            }
+        }
+
+        // Add email button
+        binding.addEmailButton.setOnClickListener {
+            val email = binding.emailInput.text.toString().trim()
+            if (email.isNotEmpty()) {
+                validateAndAddEmail(email)
+            }
+        }
+    }
+
+    private fun validateAndAddEmail(email: String) {
+        // Basic email validation
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            binding.emailInputLayout.error = "Please enter a valid email address"
+            return
+        }
+
+        // Check if already invited
+        if (invitedUsers.containsKey(email)) {
+            binding.emailInputLayout.error = "This person is already invited"
+            return
+        }
+
+        // Check if it's the current user's email
+        if (email == auth.currentUser?.email) {
+            binding.emailInputLayout.error = "You cannot invite yourself"
+            return
+        }
+
+        // Show loading state
+        isCheckingEmail = true
+        binding.emailValidationIcon.visibility = View.VISIBLE
+        binding.emailValidationIcon.setImageResource(R.drawable.ic_loading)
+        binding.addEmailButton.isEnabled = false
+
+        // Check if user exists in database
+        database.reference.child("users")
+            .orderByChild("email")
+            .equalTo(email)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    isCheckingEmail = false
+                    binding.addEmailButton.isEnabled = true
+
+                    if (snapshot.exists()) {
+                        // User found
+                        val userSnapshot = snapshot.children.first()
+                        val userId = userSnapshot.key ?: ""
+                        val fullName = userSnapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+                        val profileImageUrl = userSnapshot.child("profileImageUrl").getValue(String::class.java)
+
+                        val invitedUser = InvitedUser(email, fullName, userId, profileImageUrl)
+                        invitedUsers[email] = invitedUser
+
+                        // Show success and add chip
+                        binding.emailValidationIcon.setImageResource(R.drawable.ic_check_circle)
+                        binding.emailValidationIcon.visibility = View.VISIBLE
+
+                        // Add chip and clear input
+                        addInvitedUserChip(invitedUser)
+                        binding.emailInput.setText("")
+
+                        // Hide success icon after a moment
+                        binding.emailValidationIcon.postDelayed({
+                            binding.emailValidationIcon.visibility = View.GONE
+                        }, 1500)
+
+                    } else {
+                        // User not found
+                        binding.emailInputLayout.error = "User not found. Make sure they have an account."
+                        binding.emailValidationIcon.setImageResource(R.drawable.ic_error)
+                        binding.emailValidationIcon.visibility = View.VISIBLE
+
+                        // Hide error icon after a moment
+                        binding.emailValidationIcon.postDelayed({
+                            binding.emailValidationIcon.visibility = View.GONE
+                        }, 3000)
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    isCheckingEmail = false
+                    binding.addEmailButton.isEnabled = true
+                    binding.emailInputLayout.error = "Error checking user. Please try again."
+                    binding.emailValidationIcon.visibility = View.GONE
+                }
+            })
+    }
+
+    private fun addInvitedUserChip(invitedUser: InvitedUser) {
+        val chip = Chip(this)
+        chip.text = invitedUser.fullName
+        chip.isCloseIconVisible = true
+        chip.setChipBackgroundColorResource(R.color.app_primary_blue)
+        chip.setTextColor(resources.getColor(android.R.color.white, null))
+        chip.setCloseIconTintResource(android.R.color.white)
+
+        chip.setOnCloseIconClickListener {
+            binding.invitedUsersChipGroup.removeView(chip)
+            invitedUsers.remove(invitedUser.email)
+            updateInviteCounter()
+        }
+
+        binding.invitedUsersChipGroup.addView(chip)
+        updateInviteCounter()
+    }
+
+    private fun updateInviteCounter() {
+        val count = invitedUsers.size
+        binding.inviteCountText.text = if (count > 0) {
+            "$count ${if (count == 1) "person" else "people"} invited"
+        } else {
+            "No one invited yet"
+        }
+        binding.inviteCountText.visibility = View.VISIBLE
+    }
+
+    private fun loadExistingInvitations() {
+        if (!isEditMode || eventId == null) return
+
+        database.reference.child("events").child(eventId!!).child("invitations")
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    for (invitationSnapshot in snapshot.children) {
+                        val userId = invitationSnapshot.key ?: continue
+                        val email = invitationSnapshot.child("email").getValue(String::class.java) ?: continue
+                        val fullName = invitationSnapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+                        val profileImageUrl = invitationSnapshot.child("profileImageUrl").getValue(String::class.java)
+
+                        val invitedUser = InvitedUser(email, fullName, userId, profileImageUrl)
+                        invitedUsers[email] = invitedUser
+                        addInvitedUserChip(invitedUser)
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    // Handle error silently
+                }
+            })
     }
 
     private fun handleEventCreationOrUpdate() {
@@ -181,8 +377,25 @@ class CreateEventActivity : AppCompatActivity() {
                     "dateTime" to getCombinedDateTime(),
                     "imageUrl" to imageUrl
                 )
+
+                // Add invitations if any
+                if (invitedUsers.isNotEmpty()) {
+                    val invitationsMap = mutableMapOf<String, Any>()
+                    invitedUsers.values.forEach { invitedUser ->
+                        invitationsMap[invitedUser.userId] = mapOf(
+                            "email" to invitedUser.email,
+                            "fullName" to invitedUser.fullName,
+                            "profileImageUrl" to (invitedUser.profileImageUrl ?: ""),
+                            "status" to "pending",
+                            "invitedAt" to ServerValue.TIMESTAMP
+                        )
+                    }
+                    updates["invitations"] = invitationsMap
+                }
+
                 database.reference.child("events").child(id).updateChildren(updates)
                     .addOnSuccessListener {
+                        sendInvitationNotifications(id, title)
                         setLoading(false)
                         setResult(Activity.RESULT_OK)
                         finish()
@@ -197,7 +410,6 @@ class CreateEventActivity : AppCompatActivity() {
             val user = auth.currentUser ?: return
             val userId = user.uid
 
-            // --- FIX STARTS HERE ---
             // Fetch the user's full name from the Realtime Database before creating the event.
             database.reference.child("users").child(userId).addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
@@ -221,8 +433,25 @@ class CreateEventActivity : AppCompatActivity() {
                         "dateTime" to getCombinedDateTime()
                     )
 
-                    database.reference.child("events").push().setValue(event)
+                    // Add invitations if any
+                    if (invitedUsers.isNotEmpty()) {
+                        val invitationsMap = mutableMapOf<String, Any>()
+                        invitedUsers.values.forEach { invitedUser ->
+                            invitationsMap[invitedUser.userId] = mapOf(
+                                "email" to invitedUser.email,
+                                "fullName" to invitedUser.fullName,
+                                "profileImageUrl" to (invitedUser.profileImageUrl ?: ""),
+                                "status" to "pending",
+                                "invitedAt" to ServerValue.TIMESTAMP
+                            )
+                        }
+                        event["invitations"] = invitationsMap
+                    }
+
+                    val eventRef = database.reference.child("events").push()
+                    eventRef.setValue(event)
                         .addOnSuccessListener {
+                            sendInvitationNotifications(eventRef.key!!, title)
                             setLoading(false)
                             setResult(Activity.RESULT_OK)
                             finish()
@@ -238,8 +467,63 @@ class CreateEventActivity : AppCompatActivity() {
                     Toast.makeText(this@CreateEventActivity, "Failed to get user details: ${error.message}", Toast.LENGTH_SHORT).show()
                 }
             })
-            // --- FIX ENDS HERE ---
         }
+    }
+
+    private fun sendInvitationNotifications(eventId: String, eventTitle: String) {
+        if (invitedUsers.isEmpty()) return
+
+        // Get current user's name from database for accurate notification
+        database.reference.child("users").child(auth.currentUser?.uid ?: "")
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val currentUserName = snapshot.child("fullName").getValue(String::class.java) ?: "Someone"
+
+                    invitedUsers.values.forEach { invitedUser ->
+                        // Send notification using existing notification structure
+                        val notification = mapOf(
+                            "type" to "invitation",
+                            "text" to "$currentUserName invited you to \"$eventTitle\"",
+                            "timestamp" to ServerValue.TIMESTAMP,
+                            "read" to false,
+                            // Additional fields for invitation handling
+                            "eventId" to eventId,
+                            "eventTitle" to eventTitle,
+                            "organizerName" to currentUserName
+                        )
+
+                        // Send notification to invited user using existing pattern
+                        database.reference.child("notifications").child(invitedUser.userId).push().setValue(notification)
+
+                        // COMPATIBILITY: Also add to user's invitations for tracking
+                        val userInvitation = mapOf(
+                            "eventId" to eventId,
+                            "eventTitle" to eventTitle,
+                            "organizerName" to currentUserName,
+                            "status" to "pending",
+                            "invitedAt" to ServerValue.TIMESTAMP
+                        )
+                        database.reference.child("users").child(invitedUser.userId).child("invitations").child(eventId).setValue(userInvitation)
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    // Use fallback name if database read fails
+                    val fallbackName = auth.currentUser?.displayName ?: "Someone"
+                    invitedUsers.values.forEach { invitedUser ->
+                        val notification = mapOf(
+                            "type" to "invitation",
+                            "text" to "$fallbackName invited you to \"$eventTitle\"",
+                            "timestamp" to ServerValue.TIMESTAMP,
+                            "read" to false,
+                            "eventId" to eventId,
+                            "eventTitle" to eventTitle,
+                            "organizerName" to fallbackName
+                        )
+                        database.reference.child("notifications").child(invitedUser.userId).push().setValue(notification)
+                    }
+                }
+            })
     }
 
     private fun showDatePicker() {
@@ -304,6 +588,11 @@ class CreateEventActivity : AppCompatActivity() {
     }
 
     private fun validateInputs(): Boolean {
+        if (isCheckingEmail) {
+            Toast.makeText(this, "Please wait while we validate the email address", Toast.LENGTH_SHORT).show()
+            return false
+        }
+
         val title = binding.titleInput.text.toString().trim()
         val location = binding.locationInput.text.toString().trim()
         val description = binding.descriptionInput.text.toString().trim()
@@ -340,6 +629,29 @@ class CreateEventActivity : AppCompatActivity() {
             mapOf("_seconds" to (date!!.time / 1000), "_nanoseconds" to 0)
         } catch (e: Exception) {
             null
+        }
+    }
+
+    // COMPATIBILITY: Handle both old and new date formats
+    private fun loadExistingDateTime(eventSnapshot: DataSnapshot) {
+        // Try new format first
+        val dateTimeSnapshot = eventSnapshot.child("dateTime")
+        if (dateTimeSnapshot.exists()) {
+            val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0
+            if (seconds > 0) {
+                val date = Date(seconds * 1000)
+                selectedDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(date)
+                selectedTime = SimpleDateFormat("HH:mm", Locale.US).format(date)
+                return
+            }
+        }
+
+        // Fall back to old format
+        val oldDate = eventSnapshot.child("date").getValue(String::class.java)
+        val oldTime = eventSnapshot.child("time").getValue(String::class.java)
+        if (!oldDate.isNullOrEmpty() && !oldTime.isNullOrEmpty()) {
+            selectedDate = oldDate
+            selectedTime = oldTime
         }
     }
 
