@@ -11,6 +11,10 @@ import android.provider.MediaStore
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -41,6 +45,15 @@ class CreateEventActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Enable edge-to-edge display - EXACTLY like MainActivity
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // Configure system bar appearance - EXACTLY like MainActivity
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        insetsController.isAppearanceLightStatusBars = true
+        insetsController.isAppearanceLightNavigationBars = true
+
         binding = ActivityCreateEventBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -53,7 +66,26 @@ class CreateEventActivity : AppCompatActivity() {
             setupEditMode()
         }
 
+        // Apply system bar insets - EXACTLY like MainActivity
+        applySystemBarInsets()
+
         setupViews()
+    }
+
+    // COPIED EXACTLY from MainActivity
+    private fun applySystemBarInsets() {
+        val header = findViewById<View>(R.id.headerLayout)
+        ViewCompat.setOnApplyWindowInsetsListener(header) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.updatePadding(top = insets.top)
+            windowInsets
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.nestedScrollView) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.updatePadding(bottom = insets.bottom)
+            windowInsets
+        }
     }
 
     private fun setupEditMode() {
@@ -83,7 +115,9 @@ class CreateEventActivity : AppCompatActivity() {
     }
 
     private fun setupViews() {
+        // Updated back button setup - now using ImageView like ProfileActivity
         binding.backButton.setOnClickListener { finish() }
+
         binding.dateInput.setOnClickListener { showDatePicker() }
         binding.timeInput.setOnClickListener { showTimePicker() }
         binding.imageUploadArea.setOnClickListener { selectImage() }

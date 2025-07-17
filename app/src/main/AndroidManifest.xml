@@ -71,6 +71,12 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".PublicProfileActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Events"
+            android:screenOrientation="portrait" />
+
     </application>
 
 </manifest>

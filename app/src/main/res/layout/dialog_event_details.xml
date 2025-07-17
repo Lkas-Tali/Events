@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    FIX: This layout has been modified to serve as a custom view.
-    It's now a CardView to create the floating effect. The main content
-    is now in a child LinearLayout with an ID to allow for staggered animations.
-    A max height is set on the NestedScrollView to prevent the card from becoming too tall.
+    UPDATED: Added clickable organizer section with proper styling to make it discoverable
 -->
 <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -53,7 +50,6 @@
         </RelativeLayout>
 
         <!-- Content -->
-        <!-- FIX: Constrained height to prevent the card from being too tall -->
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -220,11 +216,17 @@
                         android:textSize="14sp" />
                 </LinearLayout>
 
-                <!-- Organizer -->
+                <!-- UPDATED: Clickable Organizer Section -->
                 <LinearLayout
+                    android:id="@+id/organizerClickableSection"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                    android:orientation="horizontal"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="8dp"
+                    android:layout_margin="-8dp">
 
                     <ImageView
                         android:layout_width="20dp"
@@ -233,15 +235,54 @@
                         android:src="@drawable/ic_person"
                         app:tint="#6B7280" />
 
-                    <TextView
-                        android:id="@+id/organizerText"
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_weight="1"
                         android:layout_marginStart="12dp"
-                        android:text="Organized by John Doe"
-                        android:textColor="#6B7280"
-                        android:textSize="14sp" />
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Organizer"
+                            android:textColor="#1F2937"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/organizerText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="John Doe"
+                            android:textColor="@color/app_primary_blue"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/organizerHintText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Tap to view profile"
+                            android:textColor="#9CA3AF"
+                            android:textSize="12sp" />
+
+                    </LinearLayout>
+
+                    <!-- Arrow indicating clickability -->
+                    <ImageView
+                        android:id="@+id/organizerArrow"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_gravity="center_vertical"
+                        android:src="@drawable/ic_arrow_back"
+                        android:rotation="180"
+                        app:tint="@color/app_primary_blue" />
+
                 </LinearLayout>
+
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
     </LinearLayout>

@@ -136,55 +136,32 @@ class ForgotPasswordActivity : AppCompatActivity() {
         // Show loading state
         showLoadingState(true)
 
-        // First check if the email exists in Firebase Auth
-        auth.fetchSignInMethodsForEmail(email)
-            .addOnCompleteListener { fetchTask ->
-                if (fetchTask.isSuccessful) {
-                    val signInMethods = fetchTask.result?.signInMethods
-
-                    // Check if the email exists (has sign-in methods)
-                    if (signInMethods.isNullOrEmpty()) {
-                        // Email doesn't exist in the database
-                        showLoadingState(false)
-                        emailInputLayout.error = getString(R.string.no_account_found)
-                        emailEditText.requestFocus()
-                    } else {
-                        // Email exists, proceed to send reset email
-                        sendResetEmail(email)
-                    }
-                } else {
-                    // Error checking email
-                    showLoadingState(false)
-                    val errorMessage = when {
-                        fetchTask.exception?.message?.contains("invalid") == true ->
-                            getString(R.string.invalid_email)
-                        fetchTask.exception?.message?.contains("network") == true ->
-                            getString(R.string.network_error)
-                        else -> fetchTask.exception?.message ?: getString(R.string.error_checking_email)
-                    }
-                    emailInputLayout.error = errorMessage
-                    emailEditText.requestFocus()
-                }
-            }
-    }
-
-    private fun sendResetEmail(email: String) {
-        // Send password reset email through Firebase
+        // Send password reset email directly without checking if email exists
+        // This is the recommended approach by Firebase for security reasons
         auth.sendPasswordResetEmail(email)
             .addOnCompleteListener { task ->
                 showLoadingState(false)
 
                 if (task.isSuccessful) {
-                    // Show success state
+                    // Always show success state, regardless of whether email exists
+                    // Firebase won't send emails to non-existent accounts, but user doesn't know this
+                    // This prevents email enumeration attacks
                     showSuccessState(email)
                 } else {
-                    // Show error message
+                    // Show error message only for technical issues (network, rate limiting, etc.)
                     val errorMessage = when {
-                        task.exception?.message?.contains("network") == true ->
+                        task.exception?.message?.contains("network") == true ||
+                                task.exception?.message?.contains("NETWORK_ERROR") == true ->
                             getString(R.string.network_error)
-                        task.exception?.message?.contains("too-many-requests") == true ->
+
+                        task.exception?.message?.contains("too-many-requests") == true ||
+                                task.exception?.message?.contains("TOO_MANY_ATTEMPTS_TRY_LATER") == true ->
                             getString(R.string.too_many_requests)
-                        else -> task.exception?.message ?: getString(R.string.reset_email_failed)
+
+                        task.exception?.message?.contains("invalid-email") == true ->
+                            getString(R.string.invalid_email)
+
+                        else -> getString(R.string.reset_email_failed)
                     }
 
                     emailInputLayout.error = errorMessage

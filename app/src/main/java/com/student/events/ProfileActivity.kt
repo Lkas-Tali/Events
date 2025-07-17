@@ -41,6 +41,9 @@ import com.student.events.databinding.ActivityProfileBinding
 import com.student.events.models.Event
 import java.text.SimpleDateFormat
 import java.util.*
+import android.widget.LinearLayout
+import androidx.core.content.ContextCompat
+
 
 class ProfileActivity : AppCompatActivity() {
 
@@ -53,7 +56,7 @@ class ProfileActivity : AppCompatActivity() {
     private val organizedEvents = mutableListOf<Event>()
     private val attendingEvents = mutableListOf<Event>()
 
-    private var currentTab = 0 // 0: Organized, 1: Attending
+    private var currentTab = 0 // 0: Organised, 1: Attending
     private var currentUserId: String? = null
     private var currentUser: FirebaseUser? = null
 
@@ -740,7 +743,54 @@ class ProfileActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.locationText).text = event.location
         view.findViewById<TextView>(R.id.descriptionText).text = event.description
         view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
-        view.findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
+
+        // UPDATED: Handle organizer section with click functionality
+        val organizerText = view.findViewById<TextView>(R.id.organizerText)
+        val organizerClickableSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
+        val organizerHintText = view.findViewById<TextView>(R.id.organizerHintText)
+        val organizerArrow = view.findViewById<ImageView>(R.id.organizerArrow)
+
+        val organizerName = event.organizer?.fullName ?: "Unknown"
+        organizerText.text = organizerName
+
+        // Make organizer section clickable only if it's not the current user
+        val organizerUid = event.organizer?.uid
+        if (organizerUid != null && organizerUid != currentUserId) {
+            organizerClickableSection.setOnClickListener {
+                Log.d(TAG, "Opening profile for organizer: $organizerName ($organizerUid)")
+
+                // Close current event details first
+                animateDetailsOut(view)
+
+                // Open public profile after a short delay
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    val intent = PublicProfileActivity.newIntent(this@ProfileActivity, organizerUid, organizerName)
+                    startActivity(intent)
+                }, 300) // Small delay to let the details close smoothly
+            }
+
+            // Keep the clickable styling and show hint
+            organizerClickableSection.isClickable = true
+            organizerClickableSection.isFocusable = true
+            organizerHintText.visibility = View.VISIBLE
+            organizerArrow.visibility = View.VISIBLE
+        } else {
+            // Remove clickable styling if it's the current user's own event
+            organizerClickableSection.setOnClickListener(null)
+            organizerClickableSection.isClickable = false
+            organizerClickableSection.isFocusable = false
+            organizerClickableSection.background = null
+
+            // Update text to indicate it's their own event
+            if (organizerUid == currentUserId) {
+                organizerText.text = "$organizerName (You)"
+                organizerText.setTextColor(resources.getColor(R.color.app_text_secondary, null))
+            }
+
+            // Hide the hint and arrow for own events
+            organizerHintText.visibility = View.GONE
+            organizerArrow.visibility = View.GONE
+        }
     }
 
     private fun animateDetailsIn(detailsView: View) {
