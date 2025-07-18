@@ -68,6 +68,9 @@ dependencies {
     // Added for Event card layout
     implementation(libs.androidx.cardview)
 
+    // NEW: Added for pull-to-refresh functionality
+    implementation(libs.androidx.swiperefreshlayout)
+
     // Firebase (from your file)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
@@ -82,5 +85,4 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-
 }

@@ -17,6 +17,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -113,6 +114,7 @@ class MainActivity : AppCompatActivity() {
 
         applySystemBarInsets()
         setupViews()
+        setupSwipeRefresh()
 
         // Show initial loading state
         binding.loadingMoreLayout.visibility = View.VISIBLE
@@ -255,6 +257,9 @@ class MainActivity : AppCompatActivity() {
                     // Load events to display
                     resetAndLoadEvents()
 
+                    // Stop refresh indicator
+                    binding.swipeRefreshLayout.isRefreshing = false
+
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing events data: ${e.message}", e)
                     Toast.makeText(this@MainActivity, "Error loading events: ${e.message}", Toast.LENGTH_LONG).show()
@@ -265,6 +270,7 @@ class MainActivity : AppCompatActivity() {
             override fun onCancelled(error: DatabaseError) {
                 Log.e(TAG, "Failed to load events: ${error.code} - ${error.message}")
                 binding.loadingMoreLayout.visibility = View.GONE
+                binding.swipeRefreshLayout.isRefreshing = false
 
                 val errorMessage = when (error.code) {
                     DatabaseError.PERMISSION_DENIED -> "Permission denied. Please check your authentication."
@@ -517,6 +523,45 @@ class MainActivity : AppCompatActivity() {
         binding.profileAvatarFrame.setOnClickListener {
             startActivity(ProfileActivity.newIntent(this))
         }
+    }
+
+    // NEW: Setup SwipeRefreshLayout
+    private fun setupSwipeRefresh() {
+        binding.swipeRefreshLayout.setColorSchemeResources(
+            R.color.app_primary_blue,
+            R.color.app_success,
+            R.color.app_accent
+        )
+
+        binding.swipeRefreshLayout.setOnRefreshListener {
+            refreshAllData()
+        }
+    }
+
+    // NEW: Refresh all data
+    private fun refreshAllData() {
+        Log.d(TAG, "Refreshing all data...")
+
+        // Reset data state
+        isDataLoaded = false
+
+        // Clear existing data
+        allEvents.clear()
+        myEvents.clear()
+        attendingEvents.clear()
+        notifications.clear()
+        displayedEvents.clear()
+        currentDisplayedCount = 0
+        hasMoreEvents = true
+
+        // Clear adapter
+        eventsAdapter.notifyDataSetChanged()
+
+        // Re-setup listeners to fetch fresh data
+        setupRealTimeListeners()
+
+        // The refresh indicator will be stopped when data is loaded
+        // in the onDataChange callbacks
     }
 
     private fun resetAndLoadEvents() {

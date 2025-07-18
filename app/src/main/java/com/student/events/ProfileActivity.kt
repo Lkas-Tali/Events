@@ -17,17 +17,20 @@ import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.databinding.DataBindingUtil
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.bumptech.glide.Glide
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
@@ -41,8 +44,6 @@ import com.student.events.databinding.ActivityProfileBinding
 import com.student.events.models.Event
 import java.text.SimpleDateFormat
 import java.util.*
-import android.widget.LinearLayout
-import androidx.core.content.ContextCompat
 
 
 class ProfileActivity : AppCompatActivity() {
@@ -121,6 +122,7 @@ class ProfileActivity : AppCompatActivity() {
             setupViews()
             setupRecyclerView()
             setupTabLayout()
+            setupSwipeRefresh()  // NEW: Setup pull-to-refresh
             loadUserProfile()
             loadUserEvents()
 
@@ -144,6 +146,32 @@ class ProfileActivity : AppCompatActivity() {
             view.updatePadding(bottom = insets.bottom)
             windowInsets
         }
+    }
+
+    // NEW: Setup SwipeRefreshLayout
+    private fun setupSwipeRefresh() {
+        binding.swipeRefreshLayout.setColorSchemeResources(
+            R.color.app_primary_blue,
+            R.color.app_success,
+            R.color.app_accent
+        )
+
+        binding.swipeRefreshLayout.setOnRefreshListener {
+            refreshAllData()
+        }
+    }
+
+    // NEW: Refresh all data
+    private fun refreshAllData() {
+        Log.d(TAG, "Refreshing profile data...")
+
+        // Clear existing data
+        organizedEvents.clear()
+        attendingEvents.clear()
+
+        // Reload profile and events
+        loadUserProfile()
+        loadUserEvents()
     }
 
     private fun setupViews() {
@@ -268,8 +296,14 @@ class ProfileActivity : AppCompatActivity() {
                                 // Load profile image
                                 loadProfileImage(profileImageUrl)
 
+                                // Update counts in calendar section
+                                updateCalendarCounts()
+
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error processing user profile data: ${e.message}", e)
+                            } finally {
+                                // Stop refresh indicator
+                                binding.swipeRefreshLayout.isRefreshing = false
                             }
                         }
 
@@ -282,12 +316,15 @@ class ProfileActivity : AppCompatActivity() {
                                 profileAboutText.text = "Welcome to my profile!"
                                 profileImageView.setImageResource(R.drawable.ic_person)
                             }
+                            // Stop refresh indicator
+                            binding.swipeRefreshLayout.isRefreshing = false
                         }
                     })
             }
 
         } catch (e: Exception) {
             Log.e(TAG, "Error loading user profile: ${e.message}", e)
+            binding.swipeRefreshLayout.isRefreshing = false
         }
     }
 
@@ -337,20 +374,57 @@ class ProfileActivity : AppCompatActivity() {
 
                                 updateTabCounts()
                                 updateEventsForTab(currentTab)
+                                updateCalendarCounts()
 
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error processing events data: ${e.message}", e)
+                            } finally {
+                                // Stop refresh indicator
+                                binding.swipeRefreshLayout.isRefreshing = false
                             }
                         }
 
                         override fun onCancelled(error: DatabaseError) {
                             Log.e(TAG, "Failed to load events: ${error.message}")
+                            // Stop refresh indicator
+                            binding.swipeRefreshLayout.isRefreshing = false
                         }
                     })
             }
 
         } catch (e: Exception) {
             Log.e(TAG, "Error loading user events: ${e.message}", e)
+            binding.swipeRefreshLayout.isRefreshing = false
+        }
+    }
+
+    // NEW: Update calendar counts
+    private fun updateCalendarCounts() {
+        try {
+            val currentMonth = Calendar.getInstance().get(Calendar.MONTH)
+            val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+
+            var thisMonthCount = 0
+            (organizedEvents + attendingEvents).forEach { event ->
+                event.dateTime?.seconds?.let { seconds ->
+                    val eventDate = Calendar.getInstance().apply {
+                        timeInMillis = seconds * 1000
+                    }
+                    if (eventDate.get(Calendar.MONTH) == currentMonth &&
+                        eventDate.get(Calendar.YEAR) == currentYear) {
+                        thisMonthCount++
+                    }
+                }
+            }
+
+            binding.apply {
+                organizedCountText.text = organizedEvents.size.toString()
+                attendingCountText.text = attendingEvents.size.toString()
+                thisMonthCountText.text = thisMonthCount.toString()
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating calendar counts: ${e.message}", e)
         }
     }
 
