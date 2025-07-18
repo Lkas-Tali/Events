@@ -1009,7 +1009,7 @@ class MainActivity : AppCompatActivity() {
                             // This is responding to an invitation
                             acceptInvitation(event, uid)
                         } else {
-                            // Regular RSVP
+                            // FIXED: Regular RSVP (user found event and decided to attend)
                             database.reference.child("users").child(uid).get().addOnSuccessListener { userSnapshot ->
                                 val fullName = userSnapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
                                 val profileImageUrl = userSnapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
@@ -1024,12 +1024,12 @@ class MainActivity : AppCompatActivity() {
                                     .addOnSuccessListener {
                                         Toast.makeText(this@MainActivity, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
 
-                                        // Notify organizer using enhanced notification
+                                        // FIXED: Notify organizer with correct message for direct RSVP
                                         event.organizer?.uid?.let { organizerId ->
                                             createInvitationNotification(
                                                 organizerId,
                                                 "rsvp",
-                                                "$fullName accepted your invite to ${event.title}.",
+                                                "$fullName RSVP'd to ${event.title}.",  // CHANGED: "RSVP'd to" instead of "accepted your invite to"
                                                 event.id,
                                                 event.title
                                             )
@@ -1135,10 +1135,70 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showNotificationsBottomSheet() {
-        val bottomSheet = NotificationsBottomSheet(this, notifications) {
-            markAllNotificationsAsRead()
-        }
+        val bottomSheet = NotificationsBottomSheet(
+            context = this,
+            notifications = notifications,
+            onMarkAllAsRead = {
+                markAllNotificationsAsRead()
+            },
+            onShowEventDetails = { event ->
+                // Use the existing custom event details system
+                // The existing checkAndUpdateInvitationStatus will handle showing correct buttons
+                showCustomEventDetails(event)
+            },
+            onNavigateToProfile = { userId, userName ->
+                // Navigate to PublicProfileActivity
+                val intent = PublicProfileActivity.newIntent(this, userId, userName)
+                startActivity(intent)
+            }
+        )
         bottomSheet.show()
+    }
+
+    // This ensures invitation notifications show the correct buttons
+    private fun showEventDetailsFromNotification(event: Event, notificationType: String) {
+        setMainContentInteraction(false)
+        val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
+
+        // Use the existing populateDetailsView but with special handling for invitations
+        populateDetailsView(detailsView, event)
+
+        // Special handling for invitation notifications
+        if (notificationType == "invitation") {
+            currentUserId?.let { uid ->
+                // Force check invitation status and show Accept/Decline buttons
+                forceInvitationButtonsForNotification(detailsView, event, uid)
+            }
+        }
+
+        binding.eventDetailsContainer.addView(detailsView)
+        binding.darkScrim.visibility = View.VISIBLE
+        animateDetailsIn(detailsView)
+    }
+
+    // NEW: Force invitation buttons when coming from notification
+    private fun forceInvitationButtonsForNotification(view: View, event: Event, userId: String) {
+        val actionButton = view.findViewById<Button>(R.id.actionButton)
+        val secondaryButton = view.findViewById<Button>(R.id.secondaryButton)
+
+        // Show Accept/Decline buttons for invitation notifications
+        actionButton.text = "Accept Invitation"
+        actionButton.setBackgroundColor(resources.getColor(R.color.app_success, null))
+        actionButton.setOnClickListener {
+            acceptInvitation(event, userId)
+            // Close the details after accepting
+            animateDetailsOut(view)
+        }
+        actionButton.visibility = View.VISIBLE
+
+        secondaryButton.text = "Decline"
+        secondaryButton.setBackgroundColor(resources.getColor(R.color.app_error, null))
+        secondaryButton.setOnClickListener {
+            declineInvitation(event, userId)
+            // Close the details after declining
+            animateDetailsOut(view)
+        }
+        secondaryButton.visibility = View.VISIBLE
     }
 
     private fun markAllNotificationsAsRead() {

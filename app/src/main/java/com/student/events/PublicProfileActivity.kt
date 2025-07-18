@@ -850,7 +850,7 @@ class PublicProfileActivity : AppCompatActivity() {
                     .addOnSuccessListener {
                         Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
                         event.organizer?.uid?.let { organizerId ->
-                            createNotification(organizerId, "rsvp", "$fullName accepted your invite to ${event.title}.")
+                            createNotification(organizerId, "rsvp", "$fullName RSVP'd to ${event.title}.")
                         }
                     }
                     .addOnFailureListener {
