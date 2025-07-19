@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
+import android.util.Log
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Toast
@@ -23,6 +24,10 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import com.google.firebase.storage.FirebaseStorage
 import com.student.events.databinding.ActivityCreateEventBinding
+import com.student.events.services.EmailService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
@@ -33,6 +38,7 @@ class CreateEventActivity : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var database: FirebaseDatabase
     private lateinit var storage: FirebaseStorage
+    private lateinit var emailService: EmailService
 
     private var selectedImageUri: Uri? = null
     private var selectedDate: String = ""
@@ -54,6 +60,15 @@ class CreateEventActivity : AppCompatActivity() {
         val profileImageUrl: String? = null
     )
 
+    companion object {
+        private const val TAG = "CreateEventActivity"
+        private const val IMAGE_PICK_REQUEST = 1001
+
+        // Email debugging flags
+        private const val ENABLE_EMAIL_DEBUG = true
+        private const val LOG_EMAIL_DETAILS = true
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -71,6 +86,13 @@ class CreateEventActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
         database = FirebaseDatabase.getInstance()
         storage = FirebaseStorage.getInstance()
+        emailService = EmailService(this)
+
+        // Log EmailJS configuration for debugging
+        if (ENABLE_EMAIL_DEBUG) {
+            Log.d(TAG, "📧 EMAIL DEBUG MODE ENABLED")
+            Log.d(TAG, emailService.getConfigurationInfo())
+        }
 
         isEditMode = intent.getBooleanExtra("editMode", false)
         if (isEditMode) {
@@ -195,21 +217,26 @@ class CreateEventActivity : AppCompatActivity() {
     }
 
     private fun validateAndAddEmail(email: String) {
+        Log.d(TAG, "👤 Validating email for invitation: ${maskEmailForLogging(email)}")
+
         // Basic email validation
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
             binding.emailInputLayout.error = "Please enter a valid email address"
+            Log.w(TAG, "❌ Invalid email format: ${maskEmailForLogging(email)}")
             return
         }
 
         // Check if already invited
         if (invitedUsers.containsKey(email)) {
             binding.emailInputLayout.error = "This person is already invited"
+            Log.w(TAG, "⚠️ Email already invited: ${maskEmailForLogging(email)}")
             return
         }
 
         // Check if it's the current user's email
         if (email == auth.currentUser?.email) {
             binding.emailInputLayout.error = "You cannot invite yourself"
+            Log.w(TAG, "⚠️ User tried to invite themselves: ${maskEmailForLogging(email)}")
             return
         }
 
@@ -218,6 +245,8 @@ class CreateEventActivity : AppCompatActivity() {
         binding.emailValidationIcon.visibility = View.VISIBLE
         binding.emailValidationIcon.setImageResource(R.drawable.ic_loading)
         binding.addEmailButton.isEnabled = false
+
+        Log.d(TAG, "🔍 Checking if user exists in database: ${maskEmailForLogging(email)}")
 
         // Check if user exists in database
         database.reference.child("users")
@@ -234,6 +263,11 @@ class CreateEventActivity : AppCompatActivity() {
                         val userId = userSnapshot.key ?: ""
                         val fullName = userSnapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
                         val profileImageUrl = userSnapshot.child("profileImageUrl").getValue(String::class.java)
+
+                        Log.d(TAG, "✅ User found in database:")
+                        Log.d(TAG, "   Email: ${maskEmailForLogging(email)}")
+                        Log.d(TAG, "   Name: $fullName")
+                        Log.d(TAG, "   User ID: $userId")
 
                         val invitedUser = InvitedUser(email, fullName, userId, profileImageUrl)
                         invitedUsers[email] = invitedUser
@@ -253,6 +287,7 @@ class CreateEventActivity : AppCompatActivity() {
 
                     } else {
                         // User not found
+                        Log.w(TAG, "❌ User not found in database: ${maskEmailForLogging(email)}")
                         binding.emailInputLayout.error = "User not found. Make sure they have an account."
                         binding.emailValidationIcon.setImageResource(R.drawable.ic_error)
                         binding.emailValidationIcon.visibility = View.VISIBLE
@@ -267,6 +302,7 @@ class CreateEventActivity : AppCompatActivity() {
                 override fun onCancelled(error: DatabaseError) {
                     isCheckingEmail = false
                     binding.addEmailButton.isEnabled = true
+                    Log.e(TAG, "❌ Database error checking user: ${error.message}")
                     binding.emailInputLayout.error = "Error checking user. Please try again."
                     binding.emailValidationIcon.visibility = View.GONE
                 }
@@ -285,10 +321,12 @@ class CreateEventActivity : AppCompatActivity() {
             binding.invitedUsersChipGroup.removeView(chip)
             invitedUsers.remove(invitedUser.email)
             updateInviteCounter()
+            Log.d(TAG, "👤 Removed invitation for: ${maskEmailForLogging(invitedUser.email)}")
         }
 
         binding.invitedUsersChipGroup.addView(chip)
         updateInviteCounter()
+        Log.d(TAG, "✅ Added invitation chip for: ${invitedUser.fullName}")
     }
 
     private fun updateInviteCounter() {
@@ -299,14 +337,18 @@ class CreateEventActivity : AppCompatActivity() {
             "No one invited yet"
         }
         binding.inviteCountText.visibility = View.VISIBLE
+        Log.d(TAG, "📊 Updated invite counter: $count people")
     }
 
     private fun loadExistingInvitations() {
         if (!isEditMode || eventId == null) return
 
+        Log.d(TAG, "📥 Loading existing invitations for event: $eventId")
+
         database.reference.child("events").child(eventId!!).child("invitations")
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
+                    var loadedCount = 0
                     for (invitationSnapshot in snapshot.children) {
                         val userId = invitationSnapshot.key ?: continue
                         val email = invitationSnapshot.child("email").getValue(String::class.java) ?: continue
@@ -316,11 +358,13 @@ class CreateEventActivity : AppCompatActivity() {
                         val invitedUser = InvitedUser(email, fullName, userId, profileImageUrl)
                         invitedUsers[email] = invitedUser
                         addInvitedUserChip(invitedUser)
+                        loadedCount++
                     }
+                    Log.d(TAG, "✅ Loaded $loadedCount existing invitations")
                 }
 
                 override fun onCancelled(error: DatabaseError) {
-                    // Handle error silently
+                    Log.e(TAG, "❌ Failed to load existing invitations: ${error.message}")
                 }
             })
     }
@@ -336,6 +380,7 @@ class CreateEventActivity : AppCompatActivity() {
 
     private fun uploadImageThenSaveEvent() {
         try {
+            Log.d(TAG, "📸 Uploading event image...")
             val storageRef = storage.reference.child("event_images/${UUID.randomUUID()}.jpg")
             val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, selectedImageUri)
             val baos = ByteArrayOutputStream()
@@ -344,19 +389,24 @@ class CreateEventActivity : AppCompatActivity() {
 
             storageRef.putBytes(data)
                 .addOnSuccessListener {
+                    Log.d(TAG, "✅ Image uploaded successfully")
                     storageRef.downloadUrl.addOnSuccessListener { uri ->
+                        Log.d(TAG, "✅ Got image download URL: $uri")
                         saveEventToDatabase(uri.toString())
-                    }.addOnFailureListener {
+                    }.addOnFailureListener { e ->
+                        Log.e(TAG, "❌ Failed to get image URL: ${e.message}")
                         setLoading(false)
                         Toast.makeText(this, "Failed to get image URL.", Toast.LENGTH_SHORT).show()
                     }
                 }
                 .addOnFailureListener { e ->
+                    Log.e(TAG, "❌ Image upload failed: ${e.message}")
                     setLoading(false)
                     Toast.makeText(this, "Image upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
 
         } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to process image: ${e.message}")
             setLoading(false)
             Toast.makeText(this, "Failed to process image.", Toast.LENGTH_SHORT).show()
         }
@@ -367,9 +417,17 @@ class CreateEventActivity : AppCompatActivity() {
         val location = binding.locationInput.text.toString().trim()
         val description = binding.descriptionInput.text.toString().trim()
 
+        Log.d(TAG, "💾 Saving event to database...")
+        Log.d(TAG, "   Title: $title")
+        Log.d(TAG, "   Location: $location")
+        Log.d(TAG, "   Description length: ${description.length}")
+        Log.d(TAG, "   Invitations: ${invitedUsers.size}")
+        Log.d(TAG, "   Edit mode: $isEditMode")
+
         if (isEditMode) {
             // Update existing event
             eventId?.let { id ->
+                Log.d(TAG, "✏️ Updating existing event: $id")
                 val updates = hashMapOf<String, Any?>(
                     "title" to title,
                     "location" to location,
@@ -391,16 +449,19 @@ class CreateEventActivity : AppCompatActivity() {
                         )
                     }
                     updates["invitations"] = invitationsMap
+                    Log.d(TAG, "📧 Will update ${invitedUsers.size} invitations")
                 }
 
                 database.reference.child("events").child(id).updateChildren(updates)
                     .addOnSuccessListener {
+                        Log.d(TAG, "✅ Event updated successfully")
                         sendInvitationNotifications(id, title)
                         setLoading(false)
                         setResult(Activity.RESULT_OK)
                         finish()
                     }
                     .addOnFailureListener { e ->
+                        Log.e(TAG, "❌ Failed to update event: ${e.message}")
                         setLoading(false)
                         Toast.makeText(this, "Failed to update event: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
@@ -410,11 +471,15 @@ class CreateEventActivity : AppCompatActivity() {
             val user = auth.currentUser ?: return
             val userId = user.uid
 
+            Log.d(TAG, "🆕 Creating new event for user: $userId")
+
             // Fetch the user's full name from the Realtime Database before creating the event.
             database.reference.child("users").child(userId).addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     val userName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown"
                     val userPhotoUrl = user.photoUrl?.toString() ?: ""
+
+                    Log.d(TAG, "👤 Creator details: $userName")
 
                     val creatorAsAttendee = mapOf(
                         "fullName" to userName,
@@ -446,23 +511,27 @@ class CreateEventActivity : AppCompatActivity() {
                             )
                         }
                         event["invitations"] = invitationsMap
+                        Log.d(TAG, "📧 Will send ${invitedUsers.size} invitations")
                     }
 
                     val eventRef = database.reference.child("events").push()
                     eventRef.setValue(event)
                         .addOnSuccessListener {
+                            Log.d(TAG, "✅ Event created successfully with ID: ${eventRef.key}")
                             sendInvitationNotifications(eventRef.key!!, title)
                             setLoading(false)
                             setResult(Activity.RESULT_OK)
                             finish()
                         }
                         .addOnFailureListener { e ->
+                            Log.e(TAG, "❌ Failed to create event: ${e.message}")
                             setLoading(false)
                             Toast.makeText(this@CreateEventActivity, "Failed to create event: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                 }
 
                 override fun onCancelled(error: DatabaseError) {
+                    Log.e(TAG, "❌ Failed to get user details: ${error.message}")
                     setLoading(false)
                     Toast.makeText(this@CreateEventActivity, "Failed to get user details: ${error.message}", Toast.LENGTH_SHORT).show()
                 }
@@ -471,60 +540,308 @@ class CreateEventActivity : AppCompatActivity() {
     }
 
     private fun sendInvitationNotifications(eventId: String, eventTitle: String) {
-        if (invitedUsers.isEmpty()) return
+        if (invitedUsers.isEmpty()) {
+            Log.d(TAG, "📧 No invitations to send")
+            return
+        }
 
-        // Get current user's name from database for accurate notification
+        Log.d(TAG, "📧 Starting invitation process for ${invitedUsers.size} users")
+        Log.d(TAG, "   Event ID: $eventId")
+        Log.d(TAG, "   Event Title: $eventTitle")
+
+        // Get current user's name and event details from database for accurate notifications and emails
         database.reference.child("users").child(auth.currentUser?.uid ?: "")
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     val currentUserName = snapshot.child("fullName").getValue(String::class.java) ?: "Someone"
+                    val currentUserEmail = snapshot.child("email").getValue(String::class.java) ?: ""
 
-                    invitedUsers.values.forEach { invitedUser ->
-                        // Send notification using existing notification structure
-                        val notification = mapOf(
-                            "type" to "invitation",
-                            "text" to "$currentUserName invited you to \"$eventTitle\"",
-                            "timestamp" to ServerValue.TIMESTAMP,
-                            "read" to false,
-                            // Additional fields for invitation handling
-                            "eventId" to eventId,
-                            "eventTitle" to eventTitle,
-                            "organizerName" to currentUserName
-                        )
+                    Log.d(TAG, "👤 Organizer details:")
+                    Log.d(TAG, "   Name: $currentUserName")
+                    Log.d(TAG, "   Email: ${maskEmailForLogging(currentUserEmail)}")
 
-                        // Send notification to invited user using existing pattern
-                        database.reference.child("notifications").child(invitedUser.userId).push().setValue(notification)
+                    // Get event details for email
+                    database.reference.child("events").child(eventId)
+                        .addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onDataChange(eventSnapshot: DataSnapshot) {
+                                val eventLocation = eventSnapshot.child("location").getValue(String::class.java) ?: ""
+                                val eventDescription = eventSnapshot.child("description").getValue(String::class.java) ?: ""
 
-                        // COMPATIBILITY: Also add to user's invitations for tracking
-                        val userInvitation = mapOf(
-                            "eventId" to eventId,
-                            "eventTitle" to eventTitle,
-                            "organizerName" to currentUserName,
-                            "status" to "pending",
-                            "invitedAt" to ServerValue.TIMESTAMP
-                        )
-                        database.reference.child("users").child(invitedUser.userId).child("invitations").child(eventId).setValue(userInvitation)
-                    }
+                                // Format event date for email
+                                val eventDateFormatted = formatEventDateForEmail(eventSnapshot)
+
+                                Log.d(TAG, "🎉 Event details for email:")
+                                Log.d(TAG, "   Location: $eventLocation")
+                                Log.d(TAG, "   Date: $eventDateFormatted")
+                                Log.d(TAG, "   Description length: ${eventDescription.length}")
+
+                                // Send notifications and emails to each invited user
+                                var emailsAttempted = 0
+                                var emailsSuccessful = 0
+                                var emailsFailed = 0
+
+                                invitedUsers.values.forEach { invitedUser ->
+                                    emailsAttempted++
+
+                                    Log.d(TAG, "📧 Processing invitation $emailsAttempted/${invitedUsers.size}")
+                                    Log.d(TAG, "   Recipient: ${invitedUser.fullName} (${maskEmailForLogging(invitedUser.email)})")
+
+                                    // Send email invitation with enhanced logging
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        if (ENABLE_EMAIL_DEBUG) {
+                                            Log.d(TAG, "🚀 Starting email send for ${maskEmailForLogging(invitedUser.email)}")
+                                        }
+
+                                        emailService.sendEventInvitation(
+                                            recipientEmail = invitedUser.email,
+                                            recipientName = invitedUser.fullName,
+                                            organizerName = currentUserName,
+                                            organizerEmail = currentUserEmail,
+                                            eventTitle = eventTitle,
+                                            eventDate = eventDateFormatted,
+                                            eventLocation = eventLocation,
+                                            eventDescription = eventDescription
+                                        ) { emailSuccess, errorMessage ->
+
+                                            if (emailSuccess) {
+                                                emailsSuccessful++
+                                                Log.d(TAG, "✅ Email invitation sent successfully")
+                                                Log.d(TAG, "   To: ${maskEmailForLogging(invitedUser.email)}")
+                                                Log.d(TAG, "   Progress: $emailsSuccessful/$emailsAttempted emails sent")
+
+                                                // Create notification that mentions email
+                                                createInvitationNotificationWithEmail(
+                                                    invitedUser.userId,
+                                                    currentUserName,
+                                                    eventId,
+                                                    eventTitle,
+                                                    invitedUser.email
+                                                )
+
+                                            } else {
+                                                emailsFailed++
+                                                Log.e(TAG, "❌ Email invitation failed")
+                                                Log.e(TAG, "   To: ${maskEmailForLogging(invitedUser.email)}")
+                                                Log.e(TAG, "   Error: $errorMessage")
+                                                Log.e(TAG, "   Progress: $emailsFailed failures, $emailsSuccessful successes")
+
+                                                // Create fallback notification
+                                                createFallbackInvitationNotification(
+                                                    invitedUser.userId,
+                                                    currentUserName,
+                                                    eventId,
+                                                    eventTitle
+                                                )
+                                            }
+
+                                            // Log final summary when all emails are processed
+                                            val totalProcessed = emailsSuccessful + emailsFailed
+                                            if (totalProcessed == emailsAttempted) {
+                                                Log.i(TAG, "📊 INVITATION SUMMARY:")
+                                                Log.i(TAG, "   Total invitations: $emailsAttempted")
+                                                Log.i(TAG, "   Emails successful: $emailsSuccessful")
+                                                Log.i(TAG, "   Emails failed: $emailsFailed")
+                                                Log.i(TAG, "   Success rate: ${(emailsSuccessful * 100) / emailsAttempted}%")
+
+                                                // Show user feedback
+                                                when {
+                                                    emailsSuccessful == emailsAttempted -> {
+                                                        Toast.makeText(this@CreateEventActivity,
+                                                            "✅ All $emailsSuccessful invitations sent successfully!",
+                                                            Toast.LENGTH_LONG).show()
+                                                    }
+                                                    emailsSuccessful > 0 -> {
+                                                        Toast.makeText(this@CreateEventActivity,
+                                                            "⚠️ $emailsSuccessful/$emailsAttempted invitations sent (some emails failed)",
+                                                            Toast.LENGTH_LONG).show()
+                                                    }
+                                                    else -> {
+                                                        Toast.makeText(this@CreateEventActivity,
+                                                            "❌ Email invitations failed, but notifications were sent",
+                                                            Toast.LENGTH_LONG).show()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            override fun onCancelled(error: DatabaseError) {
+                                Log.e(TAG, "❌ Failed to get event details for email: ${error.message}")
+                                // Fallback: send basic notifications without email
+                                sendFallbackInvitationNotifications(eventId, eventTitle, currentUserName)
+                            }
+                        })
                 }
 
                 override fun onCancelled(error: DatabaseError) {
+                    Log.e(TAG, "❌ Failed to get organizer details: ${error.message}")
                     // Use fallback name if database read fails
                     val fallbackName = auth.currentUser?.displayName ?: "Someone"
-                    invitedUsers.values.forEach { invitedUser ->
-                        val notification = mapOf(
-                            "type" to "invitation",
-                            "text" to "$fallbackName invited you to \"$eventTitle\"",
-                            "timestamp" to ServerValue.TIMESTAMP,
-                            "read" to false,
-                            "eventId" to eventId,
-                            "eventTitle" to eventTitle,
-                            "organizerName" to fallbackName
-                        )
-                        database.reference.child("notifications").child(invitedUser.userId).push().setValue(notification)
-                    }
+                    sendFallbackInvitationNotifications(eventId, eventTitle, fallbackName)
                 }
             })
     }
+
+    private fun createInvitationNotificationWithEmail(
+        userId: String,
+        organizerName: String,
+        eventId: String,
+        eventTitle: String,
+        recipientEmail: String
+    ) {
+        try {
+            Log.d(TAG, "📱 Creating notification with email reference")
+            Log.d(TAG, "   User ID: $userId")
+            Log.d(TAG, "   Email: ${maskEmailForLogging(recipientEmail)}")
+
+            val notification = mapOf(
+                "type" to "invitation",
+                "text" to "$organizerName invited you to \"$eventTitle\". Check your email (${maskEmailForLogging(recipientEmail)}) for full details and RSVP in the app.",
+                "timestamp" to ServerValue.TIMESTAMP,
+                "read" to false,
+                "eventId" to eventId,
+                "eventTitle" to eventTitle,
+                "organizerName" to organizerName,
+                "hasEmail" to true,  // Flag to indicate email was sent
+                "recipientEmail" to recipientEmail
+            )
+
+            database.reference.child("notifications").child(userId).push().setValue(notification)
+                .addOnSuccessListener {
+                    Log.d(TAG, "✅ Notification with email reference created")
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "❌ Failed to create notification: ${e.message}")
+                }
+
+            // COMPATIBILITY: Also add to user's invitations for tracking
+            val userInvitation = mapOf(
+                "eventId" to eventId,
+                "eventTitle" to eventTitle,
+                "organizerName" to organizerName,
+                "status" to "pending",
+                "invitedAt" to ServerValue.TIMESTAMP,
+                "hasEmail" to true
+            )
+            database.reference.child("users").child(userId).child("invitations").child(eventId).setValue(userInvitation)
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error creating invitation notification with email: ${e.message}", e)
+        }
+    }
+
+    private fun createFallbackInvitationNotification(
+        userId: String,
+        organizerName: String,
+        eventId: String,
+        eventTitle: String
+    ) {
+        try {
+            Log.d(TAG, "📱 Creating fallback notification (no email)")
+            Log.d(TAG, "   User ID: $userId")
+
+            val notification = mapOf(
+                "type" to "invitation",
+                "text" to "$organizerName invited you to \"$eventTitle\". Open the app to see details and RSVP.",
+                "timestamp" to ServerValue.TIMESTAMP,
+                "read" to false,
+                "eventId" to eventId,
+                "eventTitle" to eventTitle,
+                "organizerName" to organizerName,
+                "hasEmail" to false  // Flag to indicate no email was sent
+            )
+
+            database.reference.child("notifications").child(userId).push().setValue(notification)
+                .addOnSuccessListener {
+                    Log.d(TAG, "✅ Fallback notification created")
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "❌ Failed to create fallback notification: ${e.message}")
+                }
+
+            // COMPATIBILITY: Also add to user's invitations for tracking
+            val userInvitation = mapOf(
+                "eventId" to eventId,
+                "eventTitle" to eventTitle,
+                "organizerName" to organizerName,
+                "status" to "pending",
+                "invitedAt" to ServerValue.TIMESTAMP,
+                "hasEmail" to false
+            )
+            database.reference.child("users").child(userId).child("invitations").child(eventId).setValue(userInvitation)
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error creating fallback invitation notification: ${e.message}", e)
+        }
+    }
+
+    private fun sendFallbackInvitationNotifications(eventId: String, eventTitle: String, organizerName: String) {
+        Log.w(TAG, "📱 Sending fallback notifications only (no emails)")
+        invitedUsers.values.forEach { invitedUser ->
+            createFallbackInvitationNotification(
+                invitedUser.userId,
+                organizerName,
+                eventId,
+                eventTitle
+            )
+        }
+    }
+
+    private fun formatEventDateForEmail(eventSnapshot: DataSnapshot): String {
+        return try {
+            // Try new format first
+            val dateTimeSnapshot = eventSnapshot.child("dateTime")
+            if (dateTimeSnapshot.exists()) {
+                val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L
+                if (seconds > 0) {
+                    val date = Date(seconds * 1000)
+                    val displayFormat = SimpleDateFormat("EEEE, d MMMM yyyy 'at' HH:mm", Locale.UK)
+                    return displayFormat.format(date)
+                }
+            }
+
+            // Fall back to old format
+            val dateString = eventSnapshot.child("date").getValue(String::class.java)
+            val timeString = eventSnapshot.child("time").getValue(String::class.java)
+
+            if (!dateString.isNullOrEmpty() && !timeString.isNullOrEmpty()) {
+                val inputFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+                val date = inputFormat.parse("$dateString $timeString")
+                if (date != null) {
+                    val displayFormat = SimpleDateFormat("EEEE, d MMMM yyyy 'at' HH:mm", Locale.UK)
+                    return displayFormat.format(date)
+                }
+            }
+
+            "Date and time to be confirmed"
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error formatting event date for email: ${e.message}", e)
+            "Date and time to be confirmed"
+        }
+    }
+
+    private fun maskEmailForLogging(email: String): String {
+        if (!LOG_EMAIL_DETAILS) return "[HIDDEN]"
+
+        val parts = email.split("@")
+        return if (parts.size == 2) {
+            val username = parts[0]
+            val domain = parts[1]
+            val maskedUsername = if (username.length > 2) {
+                "${username.take(2)}${"*".repeat(username.length - 2)}"
+            } else {
+                "*".repeat(username.length)
+            }
+            "$maskedUsername@$domain"
+        } else {
+            email.take(3) + "*".repeat(maxOf(0, email.length - 3))
+        }
+    }
+
+    // Rest of your existing methods (showDatePicker, showTimePicker, etc.) remain the same...
 
     private fun showDatePicker() {
         val calendar = Calendar.getInstance()
@@ -602,83 +919,91 @@ class CreateEventActivity : AppCompatActivity() {
                 binding.titleInputLayout.error = "Event title is required"
                 return false
             }
+            location.isEmpty() -> {
+                binding.locationInputLayout.error = "Event location is required"
+                return false
+            }
             selectedDate.isEmpty() -> {
-                Toast.makeText(this, "Please select a date", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Please select event date", Toast.LENGTH_SHORT).show()
                 return false
             }
             selectedTime.isEmpty() -> {
-                Toast.makeText(this, "Please select a time", Toast.LENGTH_SHORT).show()
-                return false
-            }
-            location.isEmpty() -> {
-                binding.locationInputLayout.error = "Location is required"
+                Toast.makeText(this, "Please select event time", Toast.LENGTH_SHORT).show()
                 return false
             }
             description.isEmpty() -> {
-                binding.descriptionInputLayout.error = "Description is required"
+                binding.descriptionInputLayout.error = "Event description is required"
                 return false
             }
         }
+
+        binding.titleInputLayout.error = null
+        binding.locationInputLayout.error = null
+        binding.descriptionInputLayout.error = null
         return true
     }
 
-    private fun getCombinedDateTime(): Map<String, Long>? {
+    private fun setLoading(loading: Boolean) {
+        binding.createButton.isEnabled = !loading
+        binding.cancelButton.isEnabled = !loading
+        if (loading) {
+            binding.createButton.text = "Creating..."
+        } else {
+            binding.createButton.text = if (isEditMode) "Save Changes" else "Create Event"
+        }
+    }
+
+    private fun getCombinedDateTime(): Map<String, Long> {
         return try {
             val format = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
             val date = format.parse("$selectedDate $selectedTime")
-            mapOf("_seconds" to (date!!.time / 1000), "_nanoseconds" to 0)
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    // COMPATIBILITY: Handle both old and new date formats
-    private fun loadExistingDateTime(eventSnapshot: DataSnapshot) {
-        // Try new format first
-        val dateTimeSnapshot = eventSnapshot.child("dateTime")
-        if (dateTimeSnapshot.exists()) {
-            val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0
-            if (seconds > 0) {
-                val date = Date(seconds * 1000)
-                selectedDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(date)
-                selectedTime = SimpleDateFormat("HH:mm", Locale.US).format(date)
-                return
+            if (date != null) {
+                mapOf(
+                    "_seconds" to (date.time / 1000),
+                    "_nanoseconds" to 0L
+                )
+            } else {
+                throw Exception("Failed to parse date")
             }
-        }
-
-        // Fall back to old format
-        val oldDate = eventSnapshot.child("date").getValue(String::class.java)
-        val oldTime = eventSnapshot.child("time").getValue(String::class.java)
-        if (!oldDate.isNullOrEmpty() && !oldTime.isNullOrEmpty()) {
-            selectedDate = oldDate
-            selectedTime = oldTime
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error creating combined date/time: ${e.message}")
+            mapOf("_seconds" to 0L, "_nanoseconds" to 0L)
         }
     }
 
-    private fun setLoading(isLoading: Boolean) {
-        if (isLoading) {
-            binding.progressBar.visibility = View.VISIBLE
-            binding.createButton.isEnabled = false
-            binding.cancelButton.isEnabled = false
-        } else {
-            binding.progressBar.visibility = View.GONE
-            binding.createButton.isEnabled = true
-            binding.cancelButton.isEnabled = true
+    private fun loadExistingDateTime(snapshot: DataSnapshot) {
+        try {
+            // Try new format first
+            val dateTimeSnapshot = snapshot.child("dateTime")
+            if (dateTimeSnapshot.exists()) {
+                val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L
+                if (seconds > 0) {
+                    val date = Date(seconds * 1000)
+                    selectedDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(date)
+                    selectedTime = SimpleDateFormat("HH:mm", Locale.US).format(date)
+                    return
+                }
+            }
+
+            // Fall back to old format
+            selectedDate = snapshot.child("date").getValue(String::class.java) ?: ""
+            selectedTime = snapshot.child("time").getValue(String::class.java) ?: ""
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error loading existing date/time: ${e.message}")
         }
     }
 
     private fun formatDateForDisplay(dateString: String): String {
         return try {
-            val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-            val outputFormat = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
-            val date = inputFormat.parse(dateString)
-            date?.let { outputFormat.format(it) } ?: ""
+            if (dateString.isNotEmpty()) {
+                val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val outputFormat = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
+                val date = inputFormat.parse(dateString)
+                if (date != null) outputFormat.format(date) else ""
+            } else ""
         } catch (e: Exception) {
             ""
         }
-    }
-
-    companion object {
-        private const val IMAGE_PICK_REQUEST = 1001
     }
 }

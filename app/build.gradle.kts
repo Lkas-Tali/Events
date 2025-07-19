@@ -81,8 +81,10 @@ dependencies {
     // Added for loading event images
     implementation(libs.glide)
 
-    // Testing libraries (from your file)
+    // Testing libraries
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.core)
 }

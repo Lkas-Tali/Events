@@ -30,6 +30,157 @@ class NotificationsBottomSheet(
     private val database = FirebaseDatabase.getInstance()
     private val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
 
+    private inner class NotificationAdapter(
+        private val notifications: MutableList<Notification>,
+        private val onNotificationClick: (Notification) -> Unit
+    ) : RecyclerView.Adapter<NotificationAdapter.NotificationViewHolder>() {
+
+        inner class NotificationViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val notificationIcon: ImageView = view.findViewById(R.id.notificationIcon)
+            val notificationText: TextView = view.findViewById(R.id.notificationText)
+            val timestampText: TextView = view.findViewById(R.id.timestampText)
+            val unreadIndicator: View = view.findViewById(R.id.unreadIndicator)
+            val actionButtonsLayout: LinearLayout = view.findViewById(R.id.actionButtonsLayout)
+
+            // NEW: Add email indicator (add this to your layout if needed)
+            val emailIndicator: TextView? = view.findViewById(R.id.emailIndicator)
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): NotificationViewHolder {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_notification, parent, false)
+            return NotificationViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: NotificationViewHolder, position: Int) {
+            val notification = notifications[position]
+
+            holder.notificationText.text = notification.text
+            holder.timestampText.text = formatTimestamp(notification.timestamp)
+
+            // Set unread indicator
+            holder.unreadIndicator.visibility = if (notification.read) View.GONE else View.VISIBLE
+
+            // NEW: Handle email indicator for contact and invitation notifications
+            handleEmailIndicator(holder, notification)
+
+            // Set different icons and colors based on notification type
+            when (notification.type) {
+                "invitation" -> {
+                    holder.notificationIcon.setImageResource(R.drawable.ic_person_add)
+                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_primary_blue))
+                }
+                "invitation_accepted" -> {
+                    holder.notificationIcon.setImageResource(R.drawable.ic_check_circle)
+                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_success))
+                }
+                "invitation_declined" -> {
+                    holder.notificationIcon.setImageResource(R.drawable.ic_error)
+                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_error))
+                }
+                "rsvp" -> {
+                    holder.notificationIcon.setImageResource(R.drawable.ic_event)
+                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_success))
+                }
+                "contact" -> {
+                    holder.notificationIcon.setImageResource(R.drawable.ic_message)
+                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_accent))
+                }
+                else -> {
+                    holder.notificationIcon.setImageResource(R.drawable.ic_notifications)
+                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_text_secondary))
+                }
+            }
+
+            // Hide action buttons - we handle everything with clicks now
+            holder.actionButtonsLayout.visibility = View.GONE
+
+            // Set read/unread styling
+            if (notification.read) {
+                holder.itemView.alpha = 0.7f
+                holder.notificationText.setTextColor(ContextCompat.getColor(context, R.color.app_text_secondary))
+            } else {
+                holder.itemView.alpha = 1.0f
+                holder.notificationText.setTextColor(ContextCompat.getColor(context, R.color.app_text_primary))
+            }
+
+            // Add visual feedback for clickable notifications
+            val isClickable = notification.type in listOf("invitation", "invitation_accepted", "invitation_declined", "rsvp", "contact")
+            if (isClickable) {
+                holder.itemView.background = ContextCompat.getDrawable(context, R.drawable.tertiary_action_bg)
+                holder.itemView.isClickable = true
+                holder.itemView.isFocusable = true
+            } else {
+                holder.itemView.background = null
+                holder.itemView.isClickable = false
+                holder.itemView.isFocusable = false
+            }
+
+            // Set click listener
+            holder.itemView.setOnClickListener {
+                if (isClickable) {
+                    onNotificationClick(notification)
+                }
+            }
+        }
+
+        // NEW: Handle email indicator display
+        private fun handleEmailIndicator(holder: NotificationViewHolder, notification: Notification) {
+            holder.emailIndicator?.let { indicator ->
+                // Check if notification has email information
+                val hasEmail = checkNotificationHasEmail(notification)
+
+                if (hasEmail && (notification.type == "contact" || notification.type == "invitation")) {
+                    indicator.visibility = View.VISIBLE
+                    indicator.text = "📧 Email sent"
+                    indicator.setTextColor(ContextCompat.getColor(context, R.color.app_success))
+                    indicator.setBackgroundResource(R.drawable.tertiary_action_bg)
+                } else if (notification.type == "contact" || notification.type == "invitation") {
+                    // Show that email was not sent for these types
+                    indicator.visibility = View.VISIBLE
+                    indicator.text = "📱 App only"
+                    indicator.setTextColor(ContextCompat.getColor(context, R.color.app_text_secondary))
+                    indicator.setBackgroundResource(R.drawable.filter_button_bg)
+                } else {
+                    indicator.visibility = View.GONE
+                }
+            }
+        }
+
+        // NEW: Check if notification indicates email was sent
+        private fun checkNotificationHasEmail(notification: Notification): Boolean {
+            // Check notification text for email indicators
+            val text = notification.text.lowercase()
+            return text.contains("check your email") ||
+                    text.contains("email (") ||
+                    text.contains("@") ||
+                    text.contains("full details") ||
+                    text.contains("email sent")
+        }
+
+        override fun getItemCount(): Int = notifications.size
+
+        private fun formatTimestamp(timestamp: Long): String {
+            return try {
+                val now = System.currentTimeMillis()
+                val diff = now - timestamp
+
+                when {
+                    diff < 60_000 -> "Just now"
+                    diff < 3600_000 -> "${diff / 60_000}m ago"
+                    diff < 86400_000 -> "${diff / 3600_000}h ago"
+                    diff < 604800_000 -> "${diff / 86400_000}d ago"
+                    else -> {
+                        val date = Date(timestamp)
+                        SimpleDateFormat("MMM dd", Locale.getDefault()).format(date)
+                    }
+                }
+            } catch (e: Exception) {
+                "Unknown"
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "NotificationsBottomSheet"
     }
@@ -324,117 +475,5 @@ class NotificationsBottomSheet(
 
     private fun showToast(message: String) {
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-    }
-
-    // Adapter remains mostly the same, just updated for better visual feedback
-    private inner class NotificationAdapter(
-        private val notifications: MutableList<Notification>,
-        private val onNotificationClick: (Notification) -> Unit
-    ) : RecyclerView.Adapter<NotificationAdapter.NotificationViewHolder>() {
-
-        inner class NotificationViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val notificationIcon: ImageView = view.findViewById(R.id.notificationIcon)
-            val notificationText: TextView = view.findViewById(R.id.notificationText)
-            val timestampText: TextView = view.findViewById(R.id.timestampText)
-            val unreadIndicator: View = view.findViewById(R.id.unreadIndicator)
-            val actionButtonsLayout: LinearLayout = view.findViewById(R.id.actionButtonsLayout)
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): NotificationViewHolder {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_notification, parent, false)
-            return NotificationViewHolder(view)
-        }
-
-        override fun onBindViewHolder(holder: NotificationViewHolder, position: Int) {
-            val notification = notifications[position]
-
-            holder.notificationText.text = notification.text
-            holder.timestampText.text = formatTimestamp(notification.timestamp)
-
-            // Set unread indicator
-            holder.unreadIndicator.visibility = if (notification.read) View.GONE else View.VISIBLE
-
-            // Set different icons and colors based on notification type
-            when (notification.type) {
-                "invitation" -> {
-                    holder.notificationIcon.setImageResource(R.drawable.ic_person_add)
-                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_primary_blue))
-                }
-                "invitation_accepted" -> {
-                    holder.notificationIcon.setImageResource(R.drawable.ic_check_circle)
-                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_success))
-                }
-                "invitation_declined" -> {
-                    holder.notificationIcon.setImageResource(R.drawable.ic_error)
-                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_error))
-                }
-                "rsvp" -> {
-                    holder.notificationIcon.setImageResource(R.drawable.ic_event)
-                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_success))
-                }
-                "contact" -> {
-                    holder.notificationIcon.setImageResource(R.drawable.ic_message)
-                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_accent))
-                }
-                else -> {
-                    holder.notificationIcon.setImageResource(R.drawable.ic_notifications)
-                    holder.notificationIcon.setColorFilter(ContextCompat.getColor(context, R.color.app_text_secondary))
-                }
-            }
-
-            // Hide action buttons - we handle everything with clicks now
-            holder.actionButtonsLayout.visibility = View.GONE
-
-            // Set read/unread styling
-            if (notification.read) {
-                holder.itemView.alpha = 0.7f
-                holder.notificationText.setTextColor(ContextCompat.getColor(context, R.color.app_text_secondary))
-            } else {
-                holder.itemView.alpha = 1.0f
-                holder.notificationText.setTextColor(ContextCompat.getColor(context, R.color.app_text_primary))
-            }
-
-            // NEW: Add visual feedback for clickable notifications
-            val isClickable = notification.type in listOf("invitation", "invitation_accepted", "invitation_declined", "rsvp", "contact")
-            if (isClickable) {
-                holder.itemView.background = ContextCompat.getDrawable(context, R.drawable.tertiary_action_bg)
-                holder.itemView.isClickable = true
-                holder.itemView.isFocusable = true
-            } else {
-                holder.itemView.background = null
-                holder.itemView.isClickable = false
-                holder.itemView.isFocusable = false
-            }
-
-            // Set click listener
-            holder.itemView.setOnClickListener {
-                if (isClickable) {
-                    onNotificationClick(notification)
-                }
-            }
-        }
-
-        override fun getItemCount(): Int = notifications.size
-
-        private fun formatTimestamp(timestamp: Long): String {
-            return try {
-                val now = System.currentTimeMillis()
-                val diff = now - timestamp
-
-                when {
-                    diff < 60_000 -> "Just now"
-                    diff < 3600_000 -> "${diff / 60_000}m ago"
-                    diff < 86400_000 -> "${diff / 3600_000}h ago"
-                    diff < 604800_000 -> "${diff / 86400_000}d ago"
-                    else -> {
-                        val date = Date(timestamp)
-                        SimpleDateFormat("MMM dd", Locale.getDefault()).format(date)
-                    }
-                }
-            } catch (e: Exception) {
-                "Unknown"
-            }
-        }
     }
 }

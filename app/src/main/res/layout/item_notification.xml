@@ -1,124 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
+    android:orientation="horizontal"
     android:padding="16dp"
-    android:background="?attr/selectableItemBackground">
+    android:background="?android:attr/selectableItemBackground"
+    android:gravity="center_vertical">
 
+    <!-- Notification Icon -->
+    <ImageView
+        android:id="@+id/notificationIcon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="16dp"
+        android:src="@drawable/ic_notifications"
+        android:tint="@color/app_text_secondary" />
+
+    <!-- Content Container -->
     <LinearLayout
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:layout_weight="1"
+        android:orientation="vertical">
 
-        <!-- Notification Icon -->
-        <ImageView
-            android:id="@+id/notificationIcon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginEnd="12dp"
-            android:src="@drawable/ic_notifications"
-            app:tint="@color/app_text_secondary" />
-
-        <!-- Notification Content -->
-        <LinearLayout
-            android:layout_width="0dp"
+        <!-- Main notification text -->
+        <TextView
+            android:id="@+id/notificationText"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:textSize="14sp"
+            android:textColor="@color/app_text_primary"
+            android:lineSpacingExtra="2dp" />
 
-            <!-- Notification Text -->
-            <TextView
-                android:id="@+id/notificationText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Notification message goes here"
-                android:textColor="@color/app_text_primary"
-                android:textSize="14sp"
-                android:lineSpacingExtra="2dp" />
+        <!-- Timestamp and Email Indicator Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical">
 
             <!-- Timestamp -->
             <TextView
                 android:id="@+id/timestampText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="12sp"
+                android:textColor="@color/app_text_secondary" />
+
+            <!-- NEW: Email Indicator -->
+            <TextView
+                android:id="@+id/emailIndicator"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="2 hours ago"
-                android:textColor="@color/app_text_tertiary"
-                android:textSize="12sp" />
+                android:textSize="10sp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp"
+                android:layout_marginStart="8dp"
+                android:text="📧 Email sent"
+                android:textColor="@color/app_success"
+                android:background="@drawable/tertiary_action_bg"
+                android:visibility="gone" />
 
         </LinearLayout>
 
-        <!-- Unread Indicator -->
-        <View
-            android:id="@+id/unreadIndicator"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/circle_bg"
-            android:backgroundTint="@color/app_primary_blue"
-            android:visibility="gone" />
+        <!-- Action Buttons (kept for compatibility but hidden by default) -->
+        <LinearLayout
+            android:id="@+id/actionButtonsLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp"
+            android:visibility="gone">
+
+            <!-- Action buttons would go here if needed -->
+
+        </LinearLayout>
 
     </LinearLayout>
 
-    <!-- Action Buttons Layout (for invitations) -->
-    <LinearLayout
-        android:id="@+id/actionButtonsLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:orientation="horizontal"
-        android:gravity="end"
-        android:visibility="gone">
-
-        <!-- View Event Button -->
-        <Button
-            android:id="@+id/viewEventButton"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:layout_marginEnd="8dp"
-            android:text="View Event"
-            android:textAllCaps="false"
-            android:textColor="@color/app_primary_blue"
-            android:textSize="12sp"
-            android:minWidth="80dp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp" />
-
-        <!-- Decline Button -->
-        <Button
-            android:id="@+id/declineButton"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:layout_marginEnd="8dp"
-            android:text="Decline"
-            android:textAllCaps="false"
-            android:textColor="@color/app_danger"
-            android:textSize="12sp"
-            android:minWidth="70dp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp" />
-
-        <!-- Accept Button -->
-        <Button
-            android:id="@+id/acceptButton"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:background="@drawable/primary_action_bg"
-            android:text="Accept"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:minWidth="70dp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            app:backgroundTint="@color/app_success" />
-
-    </LinearLayout>
+    <!-- Unread Indicator -->
+    <View
+        android:id="@+id/unreadIndicator"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/notification_badge"
+        android:visibility="gone" />
 
 </LinearLayout>
