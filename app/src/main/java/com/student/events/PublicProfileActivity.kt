@@ -36,6 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import android.widget.LinearLayout
 
 class PublicProfileActivity : AppCompatActivity() {
 
@@ -82,7 +83,7 @@ class PublicProfileActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Enable edge-to-edge display - EXACTLY like your other activities
+        // Enable edge-to-edge display
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // Configure system bar appearance
@@ -149,7 +150,7 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // Apply system bar insets - EXACTLY like your other activities
+    // Apply system bar insets
     private fun applySystemBarInsets() {
         val header = findViewById<View>(R.id.headerLayout)
         ViewCompat.setOnApplyWindowInsetsListener(header) { view, windowInsets ->
@@ -471,7 +472,7 @@ class PublicProfileActivity : AppCompatActivity() {
                 currentUserId = currentUserId ?: "",
                 onEventClick = { event ->
                     Log.d(TAG, "🎉 Event clicked: ${event.title}")
-                    showCustomEventDetails(event)
+                    showCustomEventDetails(event, fromInviteNotification = false)
                 },
                 onEditClick = { /* Not applicable for public profile */ },
                 onCancelClick = { /* Not applicable for public profile */ },
@@ -490,7 +491,7 @@ class PublicProfileActivity : AppCompatActivity() {
                 currentUserId = currentUserId ?: "",
                 onEventClick = { event ->
                     Log.d(TAG, "📅 Past event clicked: ${event.title}")
-                    showCustomEventDetails(event)
+                    showCustomEventDetails(event, fromInviteNotification = false)
                 },
                 onEditClick = { /* Not applicable for public profile */ },
                 onCancelClick = { /* Not applicable for public profile */ },
@@ -528,7 +529,7 @@ class PublicProfileActivity : AppCompatActivity() {
 
     private fun updateEventsList() {
         try {
-            // Update upcoming events
+            // Update upcoming events with improved visibility handling
             if (upcomingEvents.isEmpty()) {
                 binding.upcomingEventsRecyclerView.visibility = View.GONE
                 binding.upcomingEmptyState.visibility = View.VISIBLE
@@ -538,7 +539,7 @@ class PublicProfileActivity : AppCompatActivity() {
                 upcomingEventsAdapter.updateEvents(upcomingEvents)
             }
 
-            // Update past events
+            // Update past events with improved visibility handling
             if (pastEvents.isEmpty()) {
                 binding.pastEventsRecyclerView.visibility = View.GONE
                 binding.pastEmptyState.visibility = View.VISIBLE
@@ -557,6 +558,268 @@ class PublicProfileActivity : AppCompatActivity() {
         val totalEvents = upcomingEvents.size + pastEvents.size
         binding.totalEventsText.text = "$totalEvents Total Events Hosted"
         Log.d(TAG, "📊 Updated total events count: $totalEvents")
+    }
+
+    // ========================================
+    // UPDATED EVENT DETAILS POPUP - NO RSVP BUTTONS BY DEFAULT
+    // ========================================
+
+    // MODIFIED: Added fromInviteNotification parameter (always false for public profiles)
+    private fun showCustomEventDetails(event: Event, fromInviteNotification: Boolean = false) {
+        setMainContentInteraction(false)
+        val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
+        populateDetailsView(detailsView, event, fromInviteNotification)
+        binding.eventDetailsContainer.addView(detailsView)
+
+        binding.darkScrim.visibility = View.VISIBLE
+        animateDetailsIn(detailsView)
+    }
+
+    // MODIFIED: Updated to handle RSVP button visibility properly
+    private fun populateDetailsView(view: View, event: Event, fromInviteNotification: Boolean = false) {
+        view.findViewById<TextView>(R.id.eventTitle).text = event.title
+        view.findViewById<ImageView>(R.id.closeButton).setOnClickListener {
+            animateDetailsOut(view)
+        }
+
+        val imageView = view.findViewById<ImageView>(R.id.eventImage)
+        if (!event.imageUrl.isNullOrEmpty()) {
+            imageView.visibility = View.VISIBLE
+            Glide.with(this).load(event.imageUrl).into(imageView)
+        } else {
+            imageView.visibility = View.GONE
+        }
+
+        view.findViewById<TextView>(R.id.dateTimeText).text = formatDateTime(event)
+        view.findViewById<TextView>(R.id.locationText).text = event.location
+        view.findViewById<TextView>(R.id.descriptionText).text = event.description
+        view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
+        view.findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
+
+        // Handle organizer click - but since this IS the organizer's profile, disable it
+        val organizerSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
+        // Disable the organizer click since user is already viewing this organizer's profile
+        organizerSection.isClickable = false
+        organizerSection.isFocusable = false
+        organizerSection.background = null
+
+        // Hide the arrow since it's not clickable
+        val organizerArrow = view.findViewById<ImageView>(R.id.organizerArrow)
+        organizerArrow.visibility = View.GONE
+
+        // Update hint text
+        val organizerHint = view.findViewById<TextView>(R.id.organizerHintText)
+        organizerHint.text = "This profile's organizer"
+        organizerHint.setTextColor(getColor(R.color.app_text_tertiary))
+
+        // MODIFIED: Handle RSVP buttons visibility and functionality
+        val actionButtonsContainer = view.findViewById<LinearLayout>(R.id.actionButtonsContainer)
+        val invitationContextText = view.findViewById<TextView>(R.id.invitationContextText)
+        val actionButton = view.findViewById<androidx.appcompat.widget.AppCompatButton>(R.id.actionButton)
+        val secondaryButton = view.findViewById<androidx.appcompat.widget.AppCompatButton>(R.id.secondaryButton)
+
+        if (fromInviteNotification) {
+            // Show RSVP buttons only when accessed from invite notification
+            Log.d(TAG, "🎉 Showing RSVP buttons - accessed from invite notification")
+
+            actionButtonsContainer.visibility = View.VISIBLE
+            invitationContextText.visibility = View.VISIBLE
+
+            val isMyEvent = event.organizer?.uid == currentUserId
+            val isAttending = event.attendees.containsKey(currentUserId)
+
+            if (isMyEvent) {
+                // User is the organizer - hide invite context
+                invitationContextText.visibility = View.GONE
+                actionButton.text = "View Details"
+                actionButton.setOnClickListener {
+                    // Just close - they're the organizer
+                    animateDetailsOut(view)
+                }
+                secondaryButton.visibility = View.GONE
+
+            } else if (isAttending) {
+                // User is already attending
+                invitationContextText.text = "You're already attending this event"
+                invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_check_circle, 0, 0, 0)
+
+                actionButton.text = "Cancel RSVP"
+                actionButton.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.app_error))
+                actionButton.setOnClickListener {
+                    handleCancelRsvpFromDetails(event, view)
+                }
+                secondaryButton.visibility = View.GONE
+
+            } else {
+                // User can accept/decline invitation
+                invitationContextText.text = "You've been invited to this event"
+                invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_person_add, 0, 0, 0)
+
+                actionButton.text = "Accept Invitation"
+                actionButton.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.app_primary_blue))
+                actionButton.setOnClickListener {
+                    handleRsvpFromDetails(event, view)
+                }
+
+                secondaryButton.text = "Decline"
+                secondaryButton.visibility = View.VISIBLE
+                secondaryButton.setOnClickListener {
+                    // Just close for decline - user chose not to attend
+                    animateDetailsOut(view)
+                    Toast.makeText(this@PublicProfileActivity, "Invitation declined", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else {
+            // Hide RSVP buttons when accessed normally (from event cards)
+            Log.d(TAG, "ℹ️ Hiding RSVP buttons - accessed from event card (details only)")
+            actionButtonsContainer.visibility = View.GONE
+        }
+    }
+
+    // NEW: Handle RSVP from event details dialog
+    private fun handleRsvpFromDetails(event: Event, detailsView: View) {
+        currentUserId?.let { uid ->
+            Log.d(TAG, "✅ RSVP to event from details: ${event.title}")
+
+            database.reference.child("users").child(uid).get().addOnSuccessListener { snapshot ->
+                val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+                val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+
+                val updates = hashMapOf<String, Any>(
+                    "events/${event.id}/attendees/$uid/fullName" to fullName,
+                    "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
+                    "events/${event.id}/attendeesCount" to event.attendeesCount + 1
+                )
+
+                database.reference.updateChildren(updates)
+                    .addOnSuccessListener {
+                        Log.d(TAG, "✅ RSVP successful from details dialog")
+                        Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_LONG).show()
+
+                        // Create notification for organizer
+                        event.organizer?.uid?.let { organizerId ->
+                            createNotification(organizerId, "rsvp", "$fullName RSVP'd to ${event.title}.")
+                        }
+
+                        // Close the details dialog
+                        animateDetailsOut(detailsView)
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "❌ RSVP failed from details: ${e.message}")
+                        Toast.makeText(this, "Failed to RSVP: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+            }
+        }
+    }
+
+    // NEW: Handle Cancel RSVP from event details dialog
+    private fun handleCancelRsvpFromDetails(event: Event, detailsView: View) {
+        currentUserId?.let { uid ->
+            Log.d(TAG, "❌ Cancel RSVP from details: ${event.title}")
+
+            val updates = hashMapOf<String, Any?>(
+                "events/${event.id}/attendees/$uid" to null,
+                "events/${event.id}/attendeesCount" to (event.attendeesCount - 1).coerceAtLeast(0)
+            )
+
+            database.reference.updateChildren(updates)
+                .addOnSuccessListener {
+                    Log.d(TAG, "✅ RSVP cancelled successfully from details dialog")
+                    Toast.makeText(this, "RSVP cancelled for \"${event.title}\"", Toast.LENGTH_SHORT).show()
+
+                    // Close the details dialog
+                    animateDetailsOut(detailsView)
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "❌ Cancel RSVP failed from details: ${e.message}")
+                    Toast.makeText(this, "Failed to cancel RSVP: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
+
+    private fun animateDetailsIn(detailsView: View) {
+        binding.eventDetailsContainer.visibility = View.VISIBLE
+
+        val scrimFadeIn = ObjectAnimator.ofFloat(binding.darkScrim, "alpha", 1f)
+        scrimFadeIn.duration = 400
+
+        detailsView.alpha = 0f
+        detailsView.scaleX = 0.8f
+        detailsView.scaleY = 0.8f
+
+        val cardFadeIn = ObjectAnimator.ofFloat(detailsView, "alpha", 1f)
+        val cardScaleX = ObjectAnimator.ofFloat(detailsView, "scaleX", 1f)
+        val cardScaleY = ObjectAnimator.ofFloat(detailsView, "scaleY", 1f)
+
+        val cardAnimatorSet = AnimatorSet()
+        cardAnimatorSet.playTogether(cardFadeIn, cardScaleX, cardScaleY)
+        cardAnimatorSet.interpolator = OvershootInterpolator(1.1f)
+        cardAnimatorSet.duration = 500
+
+        val contentContainer = detailsView.findViewById<ViewGroup>(R.id.contentContainer)
+        val contentAnimators = AnimatorSet()
+        val animators = mutableListOf<Animator>()
+
+        for (i in 0 until contentContainer.childCount) {
+            val child = contentContainer.getChildAt(i)
+            child.alpha = 0f
+            child.translationY = 80f
+
+            val childFade = ObjectAnimator.ofFloat(child, "alpha", 1f)
+            val childSlide = ObjectAnimator.ofFloat(child, "translationY", 0f)
+
+            val childSet = AnimatorSet()
+            childSet.playTogether(childFade, childSlide)
+            childSet.duration = 400
+            childSet.interpolator = DecelerateInterpolator()
+            childSet.startDelay = (i * 60).toLong()
+            animators.add(childSet)
+        }
+        contentAnimators.playTogether(animators)
+
+        val finalAnimatorSet = AnimatorSet()
+        finalAnimatorSet.play(scrimFadeIn).with(cardAnimatorSet).before(contentAnimators)
+        finalAnimatorSet.start()
+    }
+
+    private fun animateDetailsOut(detailsView: View) {
+        val scrimFadeOut = ObjectAnimator.ofFloat(binding.darkScrim, "alpha", 0f)
+        scrimFadeOut.duration = 300
+
+        val cardFadeOut = ObjectAnimator.ofFloat(detailsView, "alpha", 0f)
+        val cardSlideDown = ObjectAnimator.ofFloat(detailsView, "translationY", 100f)
+
+        val cardAnimatorSet = AnimatorSet()
+        cardAnimatorSet.playTogether(cardFadeOut, cardSlideDown)
+        cardAnimatorSet.interpolator = DecelerateInterpolator()
+        cardAnimatorSet.duration = 300
+
+        val finalAnimatorSet = AnimatorSet()
+        finalAnimatorSet.playTogether(scrimFadeOut, cardAnimatorSet)
+        finalAnimatorSet.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                binding.darkScrim.visibility = View.GONE
+                binding.eventDetailsContainer.visibility = View.GONE
+                binding.eventDetailsContainer.removeView(detailsView)
+                setMainContentInteraction(true)
+            }
+        })
+        finalAnimatorSet.start()
+    }
+
+    private fun setMainContentInteraction(enabled: Boolean) {
+        fun setViewAndChildrenEnabled(view: View, enabled: Boolean) {
+            view.isEnabled = enabled
+            if (view is ViewGroup) {
+                for (i in 0 until view.childCount) {
+                    val child = view.getChildAt(i)
+                    setViewAndChildrenEnabled(child, enabled)
+                }
+            }
+        }
+
+        val mainContent = findViewById<View>(R.id.mainContent) ?: return
+        setViewAndChildrenEnabled(mainContent, enabled)
     }
 
     // ========================================
@@ -898,7 +1161,7 @@ class PublicProfileActivity : AppCompatActivity() {
     }
 
     // ========================================
-    // MODAL ANIMATIONS - Same style as your other activities
+    // MODAL ANIMATIONS
     // ========================================
 
     private fun animateModalIn(modalView: View) {
@@ -948,126 +1211,6 @@ class PublicProfileActivity : AppCompatActivity() {
             }
         })
         finalAnimatorSet.start()
-    }
-
-    // ========================================
-    // EVENT DETAILS POPUP - Same as your other activities
-    // ========================================
-
-    private fun showCustomEventDetails(event: Event) {
-        setMainContentInteraction(false)
-        val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
-        populateDetailsView(detailsView, event)
-        binding.eventDetailsContainer.addView(detailsView)
-
-        binding.darkScrim.visibility = View.VISIBLE
-        animateDetailsIn(detailsView)
-    }
-
-    private fun populateDetailsView(view: View, event: Event) {
-        view.findViewById<TextView>(R.id.eventTitle).text = event.title
-        view.findViewById<ImageView>(R.id.closeButton).setOnClickListener {
-            animateDetailsOut(view)
-        }
-
-        val imageView = view.findViewById<ImageView>(R.id.eventImage)
-        if (!event.imageUrl.isNullOrEmpty()) {
-            imageView.visibility = View.VISIBLE
-            Glide.with(this).load(event.imageUrl).into(imageView)
-        } else {
-            imageView.visibility = View.GONE
-        }
-
-        view.findViewById<TextView>(R.id.dateTimeText).text = formatDateTime(event)
-        view.findViewById<TextView>(R.id.locationText).text = event.location
-        view.findViewById<TextView>(R.id.descriptionText).text = event.description
-        view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
-        view.findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
-    }
-
-    private fun animateDetailsIn(detailsView: View) {
-        binding.eventDetailsContainer.visibility = View.VISIBLE
-
-        val scrimFadeIn = ObjectAnimator.ofFloat(binding.darkScrim, "alpha", 1f)
-        scrimFadeIn.duration = 400
-
-        detailsView.alpha = 0f
-        detailsView.scaleX = 0.8f
-        detailsView.scaleY = 0.8f
-
-        val cardFadeIn = ObjectAnimator.ofFloat(detailsView, "alpha", 1f)
-        val cardScaleX = ObjectAnimator.ofFloat(detailsView, "scaleX", 1f)
-        val cardScaleY = ObjectAnimator.ofFloat(detailsView, "scaleY", 1f)
-
-        val cardAnimatorSet = AnimatorSet()
-        cardAnimatorSet.playTogether(cardFadeIn, cardScaleX, cardScaleY)
-        cardAnimatorSet.interpolator = OvershootInterpolator(1.1f)
-        cardAnimatorSet.duration = 500
-
-        val contentContainer = detailsView.findViewById<ViewGroup>(R.id.contentContainer)
-        val contentAnimators = AnimatorSet()
-        val animators = mutableListOf<Animator>()
-
-        for (i in 0 until contentContainer.childCount) {
-            val child = contentContainer.getChildAt(i)
-            child.alpha = 0f
-            child.translationY = 80f
-
-            val childFade = ObjectAnimator.ofFloat(child, "alpha", 1f)
-            val childSlide = ObjectAnimator.ofFloat(child, "translationY", 0f)
-
-            val childSet = AnimatorSet()
-            childSet.playTogether(childFade, childSlide)
-            childSet.duration = 400
-            childSet.interpolator = DecelerateInterpolator()
-            childSet.startDelay = (i * 60).toLong()
-            animators.add(childSet)
-        }
-        contentAnimators.playTogether(animators)
-
-        val finalAnimatorSet = AnimatorSet()
-        finalAnimatorSet.play(scrimFadeIn).with(cardAnimatorSet).before(contentAnimators)
-        finalAnimatorSet.start()
-    }
-
-    private fun animateDetailsOut(detailsView: View) {
-        val scrimFadeOut = ObjectAnimator.ofFloat(binding.darkScrim, "alpha", 0f)
-        scrimFadeOut.duration = 300
-
-        val cardFadeOut = ObjectAnimator.ofFloat(detailsView, "alpha", 0f)
-        val cardSlideDown = ObjectAnimator.ofFloat(detailsView, "translationY", 100f)
-
-        val cardAnimatorSet = AnimatorSet()
-        cardAnimatorSet.playTogether(cardFadeOut, cardSlideDown)
-        cardAnimatorSet.interpolator = DecelerateInterpolator()
-        cardAnimatorSet.duration = 300
-
-        val finalAnimatorSet = AnimatorSet()
-        finalAnimatorSet.playTogether(scrimFadeOut, cardAnimatorSet)
-        finalAnimatorSet.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator) {
-                binding.darkScrim.visibility = View.GONE
-                binding.eventDetailsContainer.visibility = View.GONE
-                binding.eventDetailsContainer.removeView(detailsView)
-                setMainContentInteraction(true)
-            }
-        })
-        finalAnimatorSet.start()
-    }
-
-    private fun setMainContentInteraction(enabled: Boolean) {
-        fun setViewAndChildrenEnabled(view: View, enabled: Boolean) {
-            view.isEnabled = enabled
-            if (view is ViewGroup) {
-                for (i in 0 until view.childCount) {
-                    val child = view.getChildAt(i)
-                    setViewAndChildrenEnabled(child, enabled)
-                }
-            }
-        }
-
-        val mainContent = findViewById<View>(R.id.mainContent) ?: return
-        setViewAndChildrenEnabled(mainContent, enabled)
     }
 
     // ========================================

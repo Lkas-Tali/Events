@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    UPDATED: Added action buttons for invitation system and RSVP functionality
+    UPDATED: RSVP buttons now hidden by default, only shown when accessed from invite notifications
 -->
 <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -216,7 +216,7 @@
                         android:textSize="14sp" />
                 </LinearLayout>
 
-                <!-- UPDATED: Clickable Organizer Section -->
+                <!-- Clickable Organizer Section -->
                 <LinearLayout
                     android:id="@+id/organizerClickableSection"
                     android:layout_width="match_parent"
@@ -284,44 +284,70 @@
 
                 </LinearLayout>
 
-                <!-- NEW: Action Buttons Section -->
+                <!-- MODIFIED: Action Buttons Section - Now hidden by default -->
+                <!-- These will only be shown when accessed from invite notifications -->
                 <LinearLayout
+                    android:id="@+id/actionButtonsContainer"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="8dp">
+                    android:orientation="vertical"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone">
 
-                    <!-- Primary Action Button (RSVP, Accept Invitation, etc.) -->
-                    <Button
-                        android:id="@+id/actionButton"
-                        android:layout_width="0dp"
-                        android:layout_height="56dp"
-                        android:layout_weight="1"
-                        android:layout_marginEnd="8dp"
-                        android:text="RSVP"
-                        android:textColor="@android:color/white"
-                        android:textSize="16sp"
+                    <!-- Invitation Context Text (shown when from invitation) -->
+                    <TextView
+                        android:id="@+id/invitationContextText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:padding="12dp"
+                        android:background="@drawable/info_background"
+                        android:text="You've been invited to this event"
+                        android:textColor="@color/app_primary_blue"
+                        android:textSize="14sp"
                         android:textStyle="bold"
-                        android:background="@drawable/button_rounded"
-                        android:backgroundTint="@color/app_primary_blue"
-                        android:elevation="2dp"
-                        android:visibility="visible" />
-
-                    <!-- Secondary Action Button (Decline, Cancel, etc.) -->
-                    <Button
-                        android:id="@+id/secondaryButton"
-                        android:layout_width="0dp"
-                        android:layout_height="56dp"
-                        android:layout_weight="1"
-                        android:layout_marginStart="8dp"
-                        android:text="Decline"
-                        android:textColor="@android:color/white"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:background="@drawable/button_rounded"
-                        android:backgroundTint="@color/app_error"
-                        android:elevation="2dp"
+                        android:gravity="center"
+                        android:drawableStart="@drawable/ic_person_add"
+                        android:drawablePadding="8dp"
                         android:visibility="gone" />
+
+                    <!-- Action Buttons Row -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <!-- Primary Action Button (Accept/RSVP) -->
+                        <Button
+                            android:id="@+id/actionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="56dp"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="8dp"
+                            android:text="Accept Invitation"
+                            android:textColor="@android:color/white"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:background="@drawable/button_rounded"
+                            android:backgroundTint="@color/app_primary_blue"
+                            android:elevation="2dp" />
+
+                        <!-- Secondary Action Button (Decline) -->
+                        <Button
+                            android:id="@+id/secondaryButton"
+                            android:layout_width="0dp"
+                            android:layout_height="56dp"
+                            android:layout_weight="1"
+                            android:layout_marginStart="8dp"
+                            android:text="Decline"
+                            android:textColor="@android:color/white"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:background="@drawable/button_rounded"
+                            android:backgroundTint="@color/app_error"
+                            android:elevation="2dp" />
+
+                    </LinearLayout>
 
                 </LinearLayout>
 

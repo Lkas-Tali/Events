@@ -432,7 +432,7 @@ class MainActivity : AppCompatActivity() {
         eventsAdapter = EventsAdapter(
             events = displayedEvents,
             currentUserId = currentUserId ?: "",
-            onEventClick = { event -> showCustomEventDetails(event) },
+            onEventClick = { event -> showCustomEventDetails(event, fromInviteNotification = false) },
             onEditClick = { event -> showEditEventDialog(event) },
             onCancelClick = { event -> showCancelEventDialog(event) },
             onRsvpClick = { event -> handleRsvp(event) },
@@ -650,17 +650,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showCustomEventDetails(event: Event) {
+    private fun showCustomEventDetails(event: Event, fromInviteNotification: Boolean = false) {
         setMainContentInteraction(false)
         val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
-        populateDetailsView(detailsView, event)
+        populateDetailsView(detailsView, event, fromInviteNotification)
         binding.eventDetailsContainer.addView(detailsView)
 
         binding.darkScrim.visibility = View.VISIBLE
         animateDetailsIn(detailsView)
     }
 
-    private fun populateDetailsView(view: View, event: Event) {
+    private fun populateDetailsView(view: View, event: Event, fromInviteNotification: Boolean = false) {
         view.findViewById<TextView>(R.id.eventTitle).text = event.title
         view.findViewById<ImageView>(R.id.closeButton).setOnClickListener {
             animateDetailsOut(view)
@@ -678,116 +678,145 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.locationText).text = event.location
         view.findViewById<TextView>(R.id.descriptionText).text = event.description
         view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
+        view.findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
 
-        // Handle organizer section
-        val organizerText = view.findViewById<TextView>(R.id.organizerText)
-        val organizerClickableSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
-        val organizerHintText = view.findViewById<TextView>(R.id.organizerHintText)
-        val organizerArrow = view.findViewById<ImageView>(R.id.organizerArrow)
+        // Handle organizer click - navigate to public profile
+        val organizerSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
+        organizerSection.setOnClickListener {
+            event.organizer?.let { organizer ->
+                Log.d(TAG, "📱 Navigating to organizer profile: ${organizer.fullName}")
+                animateDetailsOut(view) // Close current dialog first
 
-        val organizerName = event.organizer?.fullName ?: "Unknown"
-        organizerText.text = organizerName
-
-        val organizerUid = event.organizer?.uid
-        if (organizerUid != null && organizerUid != currentUserId) {
-            organizerClickableSection.setOnClickListener {
-                animateDetailsOut(view)
+                // Small delay to ensure clean transition
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    val intent = PublicProfileActivity.newIntent(this@MainActivity, organizerUid, organizerName)
-                    startActivity(intent)
+                    startActivity(PublicProfileActivity.newIntent(this@MainActivity, organizer.uid, organizer.fullName))
                 }, 300)
             }
-            organizerClickableSection.isClickable = true
-            organizerClickableSection.isFocusable = true
-            organizerHintText.visibility = View.VISIBLE
-            organizerArrow.visibility = View.VISIBLE
-        } else {
-            organizerClickableSection.setOnClickListener(null)
-            organizerClickableSection.isClickable = false
-            organizerClickableSection.isFocusable = false
-            organizerClickableSection.background = null
-
-            if (organizerUid == currentUserId) {
-                organizerText.text = "$organizerName (You)"
-                organizerText.setTextColor(resources.getColor(R.color.app_text_secondary, null))
-            }
-            organizerHintText.visibility = View.GONE
-            organizerArrow.visibility = View.GONE
         }
 
-        // NEW: Handle invitation status and buttons
-        currentUserId?.let { uid ->
-            checkAndUpdateInvitationStatus(view, event, uid)
+        // MODIFIED: Handle RSVP buttons visibility and functionality
+        val actionButtonsContainer = view.findViewById<LinearLayout>(R.id.actionButtonsContainer)
+        val invitationContextText = view.findViewById<TextView>(R.id.invitationContextText)
+        val actionButton = view.findViewById<Button>(R.id.actionButton)
+        val secondaryButton = view.findViewById<Button>(R.id.secondaryButton)
+
+        if (fromInviteNotification) {
+            // Show RSVP buttons only when accessed from invite notification
+            Log.d(TAG, "🎉 Showing RSVP buttons - accessed from invite notification")
+
+            actionButtonsContainer.visibility = View.VISIBLE
+            invitationContextText.visibility = View.VISIBLE
+
+            val isMyEvent = event.organizer?.uid == currentUserId
+            val isAttending = event.attendees.containsKey(currentUserId)
+
+            if (isMyEvent) {
+                // User is the organizer - hide invite context
+                invitationContextText.visibility = View.GONE
+                actionButton.text = "View Details"
+                actionButton.setOnClickListener {
+                    // Just close - they're the organizer
+                    animateDetailsOut(view)
+                }
+                secondaryButton.visibility = View.GONE
+
+            } else if (isAttending) {
+                // User is already attending
+                invitationContextText.text = "You're already attending this event"
+                invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_check_circle, 0, 0, 0)
+
+                actionButton.text = "Cancel RSVP"
+                actionButton.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.app_error))
+                actionButton.setOnClickListener {
+                    handleCancelRsvpFromDetails(event, view)
+                }
+                secondaryButton.visibility = View.GONE
+
+            } else {
+                // User can accept/decline invitation
+                invitationContextText.text = "You've been invited to this event"
+                invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_person_add, 0, 0, 0)
+
+                actionButton.text = "Accept Invitation"
+                actionButton.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.app_primary_blue))
+                actionButton.setOnClickListener {
+                    handleRsvpFromDetails(event, view)
+                }
+
+                secondaryButton.text = "Decline"
+                secondaryButton.visibility = View.VISIBLE
+                secondaryButton.setOnClickListener {
+                    // Just close for decline - user chose not to attend
+                    animateDetailsOut(view)
+                    Toast.makeText(this@MainActivity, "Invitation declined", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else {
+            // Hide RSVP buttons when accessed normally (from event cards)
+            Log.d(TAG, "ℹ️ Hiding RSVP buttons - accessed from event card (details only)")
+            actionButtonsContainer.visibility = View.GONE
         }
     }
 
-    private fun checkAndUpdateInvitationStatus(view: View, event: Event, userId: String) {
-        // Check if user was invited to this event
-        database.reference.child("events").child(event.id).child("invitations").child(userId)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val actionButton = view.findViewById<Button>(R.id.actionButton)
-                    val secondaryButton = view.findViewById<Button>(R.id.secondaryButton)
+    // NEW: Handle RSVP from event details dialog
+    private fun handleRsvpFromDetails(event: Event, detailsView: View) {
+        currentUserId?.let { uid ->
+            Log.d(TAG, "✅ RSVP to event from details: ${event.title}")
 
-                    if (snapshot.exists()) {
-                        // User was invited
-                        val invitationStatus = snapshot.child("status").getValue(String::class.java) ?: "pending"
+            database.reference.child("users").child(uid).get().addOnSuccessListener { snapshot ->
+                val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+                val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
 
-                        when (invitationStatus) {
-                            "pending" -> {
-                                // Show Accept/Decline buttons
-                                actionButton.text = "Accept Invitation"
-                                actionButton.setBackgroundColor(resources.getColor(R.color.app_success, null))
-                                actionButton.setOnClickListener { acceptInvitation(event, userId) }
-                                actionButton.visibility = View.VISIBLE
+                val updates = hashMapOf<String, Any>(
+                    "events/${event.id}/attendees/$uid/fullName" to fullName,
+                    "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
+                    "events/${event.id}/attendeesCount" to event.attendeesCount + 1
+                )
 
-                                secondaryButton.text = "Decline"
-                                secondaryButton.setBackgroundColor(resources.getColor(R.color.app_error, null))
-                                secondaryButton.setOnClickListener { declineInvitation(event, userId) }
-                                secondaryButton.visibility = View.VISIBLE
-                            }
-                            "accepted" -> {
-                                // Show that invitation was accepted, allow to cancel RSVP
-                                actionButton.text = "Cancel RSVP"
-                                actionButton.setBackgroundColor(resources.getColor(R.color.app_error, null))
-                                actionButton.setOnClickListener { showCancelRsvpDialog(event) }
-                                actionButton.visibility = View.VISIBLE
-                                secondaryButton.visibility = View.GONE
-                            }
-                            "declined" -> {
-                                // Show option to accept invitation again
-                                actionButton.text = "Accept Invitation"
-                                actionButton.setBackgroundColor(resources.getColor(R.color.app_success, null))
-                                actionButton.setOnClickListener { acceptInvitation(event, userId) }
-                                actionButton.visibility = View.VISIBLE
-                                secondaryButton.visibility = View.GONE
-                            }
+                database.reference.updateChildren(updates)
+                    .addOnSuccessListener {
+                        Log.d(TAG, "✅ RSVP successful from details dialog")
+                        Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_LONG).show()
+
+                        // Create notification for organizer
+                        event.organizer?.uid?.let { organizerId ->
+                            createNotification(organizerId, "rsvp", "$fullName RSVP'd to ${event.title}.")
                         }
-                    } else {
-                        // User not invited, show regular RSVP/Cancel buttons
-                        if (event.attendees.containsKey(userId)) {
-                            actionButton.text = "Cancel RSVP"
-                            actionButton.setBackgroundColor(resources.getColor(R.color.app_error, null))
-                            actionButton.setOnClickListener { showCancelRsvpDialog(event) }
-                        } else {
-                            actionButton.text = "RSVP"
-                            actionButton.setBackgroundColor(resources.getColor(R.color.app_primary_blue, null))
-                            actionButton.setOnClickListener { handleRsvp(event) }
-                        }
-                        actionButton.visibility = View.VISIBLE
-                        secondaryButton.visibility = View.GONE
+
+                        // Close the details dialog
+                        animateDetailsOut(detailsView)
                     }
-                }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "❌ RSVP failed from details: ${e.message}")
+                        Toast.makeText(this, "Failed to RSVP: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+            }
+        }
+    }
 
-                override fun onCancelled(error: DatabaseError) {
-                    // Handle error silently, show default RSVP button
-                    val actionButton = view.findViewById<Button>(R.id.actionButton)
-                    actionButton.text = "RSVP"
-                    actionButton.setBackgroundColor(resources.getColor(R.color.app_primary_blue, null))
-                    actionButton.setOnClickListener { handleRsvp(event) }
-                    actionButton.visibility = View.VISIBLE
+    // NEW: Handle Cancel RSVP from event details dialog
+    private fun handleCancelRsvpFromDetails(event: Event, detailsView: View) {
+        currentUserId?.let { uid ->
+            Log.d(TAG, "❌ Cancel RSVP from details: ${event.title}")
+
+            val updates = hashMapOf<String, Any?>(
+                "events/${event.id}/attendees/$uid" to null,
+                "events/${event.id}/attendeesCount" to (event.attendeesCount - 1).coerceAtLeast(0)
+            )
+
+            database.reference.updateChildren(updates)
+                .addOnSuccessListener {
+                    Log.d(TAG, "✅ RSVP cancelled successfully from details dialog")
+                    Toast.makeText(this, "RSVP cancelled for \"${event.title}\"", Toast.LENGTH_SHORT).show()
+
+                    // Close the details dialog
+                    animateDetailsOut(detailsView)
                 }
-            })
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "❌ Cancel RSVP failed from details: ${e.message}")
+                    Toast.makeText(this, "Failed to cancel RSVP: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+        }
     }
 
     // NEW: Accept invitation
