@@ -5,7 +5,10 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -41,6 +44,7 @@ import com.student.events.models.Notification
 import com.student.events.models.Organizer
 import com.student.events.models.DateTime
 import com.student.events.models.Attendee
+import com.student.events.services.AuthStateManager
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -52,6 +56,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var database: FirebaseDatabase
     private lateinit var eventsAdapter: EventsAdapter
 
+    // NEW: Session management with SharedPreferences
+    private lateinit var sessionPrefs: SharedPreferences
+    private lateinit var authStateListener: FirebaseAuth.AuthStateListener
+
     private val allEvents = mutableListOf<Event>()
     private val myEvents = mutableListOf<Event>()
     private val attendingEvents = mutableListOf<Event>()
@@ -59,13 +67,14 @@ class MainActivity : AppCompatActivity() {
 
     private val displayedEvents = mutableListOf<Event>()
     private var currentDisplayedCount = 0
-    private val EVENTS_PER_PAGE = 8 // Increased to show more events at once
+    private val EVENTS_PER_PAGE = 8
     private var isLoading = false
     private var hasMoreEvents = true
-    private var isDataLoaded = false // Flag to track if initial data is loaded
+    private var isDataLoaded = false
 
     private var currentUserId: String? = null
     private var currentTab = "discover"
+    private var isAuthenticating = false // NEW: Prevent double authentication
 
     // Filters
     private var searchQuery = ""
@@ -85,6 +94,10 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val CREATE_EVENT_REQUEST = 1001
         private const val EDIT_EVENT_REQUEST = 1002
+        private const val PREFS_NAME = "EventsAppSession"
+        private const val KEY_USER_LOGGED_IN = "user_logged_in"
+        private const val KEY_USER_ID = "user_id"
+        private const val KEY_LAST_LOGIN_TIME = "last_login_time"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,22 +107,22 @@ class MainActivity : AppCompatActivity() {
 
         // Enable edge-to-edge display
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        // Configure system bar appearance
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = true
         insetsController.isAppearanceLightNavigationBars = true
 
+        // NEW: Initialize session management
+        sessionPrefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+
+        // Initialize Firebase
         auth = FirebaseAuth.getInstance()
         database = FirebaseDatabase.getInstance()
-        currentUserId = auth.currentUser?.uid
 
-        Log.d(TAG, "onCreate - Current User ID: $currentUserId")
+        Log.d(TAG, "onCreate - Starting authentication check")
 
-        if (currentUserId == null) {
-            startActivity(Intent(this, LoginActivity::class.java))
-            finish()
-            return
+        // NEW: Enhanced authentication check with multiple fallbacks
+        if (!checkUserAuthentication()) {
+            return // Exit if user is not authenticated
         }
 
         applySystemBarInsets()
@@ -120,8 +133,124 @@ class MainActivity : AppCompatActivity() {
         binding.loadingMoreLayout.visibility = View.VISIBLE
         binding.emptyStateText.visibility = View.GONE
 
+        // NEW: Setup auth state listener for real-time auth monitoring
+        setupAuthStateListener()
+
         // Start real-time listeners
         setupRealTimeListeners()
+    }
+
+    // NEW: Enhanced authentication check with multiple fallbacks
+    private fun checkUserAuthentication(): Boolean {
+        val authStateManager = AuthStateManager.getInstance(this)
+
+        // Check if session is valid
+        if (!authStateManager.validateSession()) {
+            Log.d(TAG, "Invalid session - redirecting to login")
+            navigateToLogin()
+            return false
+        }
+
+        // Get current user ID from auth state manager
+        currentUserId = sessionPrefs.getString(KEY_USER_ID, null)
+
+        if (currentUserId.isNullOrEmpty()) {
+            Log.d(TAG, "No user ID found - redirecting to login")
+            navigateToLogin()
+            return false
+        }
+
+        Log.d(TAG, "✅ Valid authentication found for user: $currentUserId")
+        return true
+    }
+
+    // NEW: Attempt to restore authentication for edge cases
+    private fun attemptAuthRestore(userId: String) {
+        Log.d(TAG, "Attempting to restore authentication for user: $userId")
+
+        // Check if user data still exists in database
+        database.reference.child("users").child(userId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    if (snapshot.exists()) {
+                        Log.d(TAG, "✅ User data found in database - session is valid")
+                        // User exists in database, keep session valid
+                        updateSessionData(userId)
+                    } else {
+                        Log.d(TAG, "❌ User data not found - clearing invalid session")
+                        clearSessionData()
+                        navigateToLogin()
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e(TAG, "Failed to verify user data: ${error.message}")
+                    // On error, keep existing session for user convenience
+                }
+            })
+    }
+
+    // NEW: Setup Firebase Auth State Listener for real-time monitoring
+    private fun setupAuthStateListener() {
+        authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            val user = firebaseAuth.currentUser
+            Log.d(TAG, "Auth state changed - User: ${user?.uid}")
+
+            if (user == null && !isAuthenticating) {
+                // User was signed out - check if it was intentional
+                val isSessionValid = sessionPrefs.getBoolean(KEY_USER_LOGGED_IN, false)
+                if (isSessionValid) {
+                    Log.w(TAG, "⚠️ Firebase user null but session valid - possible device-specific issue")
+                    // Don't immediately logout, give Firebase a chance to restore
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        if (auth.currentUser == null && sessionPrefs.getBoolean(KEY_USER_LOGGED_IN, false)) {
+                            Log.w(TAG, "Firebase user still null after delay - keeping session")
+                            // Keep the session but monitor for database connectivity
+                        }
+                    }, 3000) // Wait 3 seconds for Firebase to potentially restore
+                } else {
+                    Log.d(TAG, "User signed out and session invalid - redirecting to login")
+                    navigateToLogin()
+                }
+            } else if (user != null) {
+                Log.d(TAG, "✅ Firebase user confirmed: ${user.uid}")
+                currentUserId = user.uid
+                updateSessionData(user.uid)
+            }
+        }
+
+        auth.addAuthStateListener(authStateListener)
+    }
+
+    // NEW: Update session data when user is authenticated
+    private fun updateSessionData(userId: String) {
+        sessionPrefs.edit().apply {
+            putBoolean(KEY_USER_LOGGED_IN, true)
+            putString(KEY_USER_ID, userId)
+            putLong(KEY_LAST_LOGIN_TIME, System.currentTimeMillis())
+            apply()
+        }
+        Log.d(TAG, "Session data updated for user: $userId")
+    }
+
+    // NEW: Clear session data on logout
+    private fun clearSessionData() {
+        sessionPrefs.edit().clear().apply()
+        Log.d(TAG, "Session data cleared")
+    }
+
+    // NEW: Navigate to login with proper cleanup
+    private fun navigateToLogin() {
+        if (!isAuthenticating) {
+            isAuthenticating = true
+            Log.d(TAG, "Navigating to login...")
+            cleanupListeners()
+
+            val intent = Intent(this, LoginActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            startActivity(intent)
+            finish()
+        }
     }
 
     private fun applySystemBarInsets() {
@@ -160,6 +289,14 @@ class MainActivity : AppCompatActivity() {
             userDataListener = object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     try {
+                        if (!snapshot.exists()) {
+                            Log.w(TAG, "User data not found - user may have been deleted")
+                            // User was deleted from database
+                            clearSessionData()
+                            navigateToLogin()
+                            return
+                        }
+
                         val fullName = snapshot.child("fullName").getValue(String::class.java)
                         val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java)
 
@@ -183,10 +320,16 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onCancelled(error: DatabaseError) {
                     Log.e(TAG, "Failed to load user data: ${error.message}")
-                    // Fallback to auth user data
-                    val fallbackName = auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
-                    binding.userNameText.text = fallbackName
-                    loadAvatarImage(null)
+                    if (error.code == DatabaseError.PERMISSION_DENIED) {
+                        Log.w(TAG, "Permission denied - user may not be authenticated")
+                        clearSessionData()
+                        navigateToLogin()
+                    } else {
+                        // Fallback to auth user data
+                        val fallbackName = auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
+                        binding.userNameText.text = fallbackName
+                        loadAvatarImage(null)
+                    }
                 }
             }
 
@@ -273,7 +416,12 @@ class MainActivity : AppCompatActivity() {
                 binding.swipeRefreshLayout.isRefreshing = false
 
                 val errorMessage = when (error.code) {
-                    DatabaseError.PERMISSION_DENIED -> "Permission denied. Please check your authentication."
+                    DatabaseError.PERMISSION_DENIED -> {
+                        Log.w(TAG, "Permission denied for events - user may not be authenticated")
+                        clearSessionData()
+                        navigateToLogin()
+                        return
+                    }
                     DatabaseError.NETWORK_ERROR -> "Network error. Please check your connection."
                     else -> "Failed to load events: ${error.message}"
                 }
@@ -1248,24 +1396,47 @@ class MainActivity : AppCompatActivity() {
         createInvitationNotification(userId, type, text)
     }
 
+    // Enhanced logout with proper session cleanup
     private fun showLogoutConfirmation() {
         AlertDialog.Builder(this)
             .setTitle("Logout")
             .setMessage("Are you sure you want to logout?")
             .setPositiveButton("Logout") { _, _ ->
-                // Clean up listeners before logout
-                cleanupListeners()
-                auth.signOut()
-                startActivity(Intent(this, LoginActivity::class.java))
-                finishAffinity()
+                performLogout()
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    // Clean up all listeners to prevent memory leaks
+    // NEW: Enhanced logout process
+    private fun performLogout() {
+        Log.d(TAG, "Performing logout...")
+        isAuthenticating = true
+
+        // Clear session data first
+        clearSessionData()
+
+        // Clean up listeners
+        cleanupListeners()
+
+        // Sign out from Firebase
+        auth.signOut()
+
+        // Navigate to login
+        val intent = Intent(this, LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
+    }
+
+    // Enhanced cleanup with auth state listener
     private fun cleanupListeners() {
         Log.d(TAG, "Cleaning up Firebase listeners")
+
+        // Remove auth state listener
+        if (::authStateListener.isInitialized) {
+            auth.removeAuthStateListener(authStateListener)
+        }
 
         userDataListener?.let { listener ->
             userDataRef?.removeEventListener(listener)
@@ -1286,7 +1457,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Proper lifecycle management
+    // Lifecycle management with session preservation
+    override fun onPause() {
+        super.onPause()
+        // Update last activity time
+        currentUserId?.let { userId ->
+            sessionPrefs.edit()
+                .putLong(KEY_LAST_LOGIN_TIME, System.currentTimeMillis())
+                .apply()
+        }
+    }
+
     override fun onDestroy() {
         Log.d(TAG, "onDestroy called - cleaning up listeners")
         cleanupListeners()

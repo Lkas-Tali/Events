@@ -2,26 +2,30 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- This permission is required to connect to Firebase -->
+    <!-- Existing permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- Permission for reading images from device storage -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-
-    <!-- Permission for camera access (for profile image capture) -->
     <uses-permission android:name="android.permission.CAMERA" />
 
-    <!-- Camera feature declaration - not required because users can also select from gallery -->
+    <!-- Enhanced permissions for persistent authentication -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Samsung-specific permission for better background execution -->
+    <uses-permission android:name="com.samsung.android.providers.context.permission.WRITE_USE_APP_FEATURE_SURVEY" />
+
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
-
-    <!-- Camera2 feature declaration for newer camera API -->
     <uses-feature
         android:name="android.hardware.camera2"
         android:required="false" />
 
     <application
+        android:name=".EventsApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -30,13 +34,29 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Events"
+        android:largeHeap="true"
+        android:hardwareAccelerated="true"
+        android:persistent="true"
         tools:targetApi="31">
 
-        <!-- LoginActivity is now the LAUNCHER activity. -->
-        <!-- This is the first screen the user will see. -->
+        <!-- Keep the app process alive -->
+        <meta-data
+            android:name="android.max_aspect"
+            android:value="2.4" />
+
+        <!-- Firebase messaging service meta-data for better persistence -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="true" />
+        <meta-data
+            android:name="firebase_analytics_collection_enabled"
+            android:value="true" />
+
+        <!-- LoginActivity -->
         <activity
             android:name=".LoginActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="stateVisible|adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -44,18 +64,16 @@
             </intent-filter>
         </activity>
 
-        <!-- MainActivity is now a regular activity with no special entry point. -->
-        <!-- We will navigate to it from our LoginActivity code. -->
+        <!-- MainActivity with singleTask to prevent multiple instances -->
         <activity
             android:name=".MainActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:launchMode="singleTask" />
 
-        <!-- Declaration for SignUpActivity to prevent app crash -->
         <activity
             android:name=".SignUpActivity"
             android:exported="false" />
 
-        <!-- Declaration for CreateEventActivity -->
         <activity
             android:name=".CreateEventActivity"
             android:exported="false"
@@ -76,6 +94,36 @@
             android:exported="false"
             android:theme="@style/Theme.Events"
             android:screenOrientation="portrait" />
+
+        <!-- Authentication Service -->
+        <service
+            android:name=".services.AuthenticationService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false" />
+
+        <!-- Boot Receiver to restore authentication after device restart -->
+        <receiver
+            android:name=".receivers.BootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Network State Receiver -->
+        <receiver
+            android:name=".receivers.NetworkStateReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+            </intent-filter>
+        </receiver>
 
     </application>
 
