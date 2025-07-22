@@ -65,15 +65,19 @@
         </activity>
 
         <!-- MainActivity with singleTask to prevent multiple instances -->
+        <!-- UPDATED: Added adjustResize for search fields and future input fields -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
-            android:launchMode="singleTask" />
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".SignUpActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
+        <!-- CreateEventActivity - ALREADY HAS adjustResize (GOOD!) -->
         <activity
             android:name=".CreateEventActivity"
             android:exported="false"
@@ -82,7 +86,8 @@
         <activity
             android:name=".ProfileActivity"
             android:exported="false"
-            android:theme="@style/Theme.Events" />
+            android:theme="@style/Theme.Events"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".ForgotPasswordActivity"
@@ -114,17 +119,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
-
-        <!-- Network State Receiver -->
-        <receiver
-            android:name=".receivers.NetworkStateReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
-            </intent-filter>
-        </receiver>
-
     </application>
 
 </manifest>

@@ -3,21 +3,25 @@ package com.student.events
 import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
 import androidx.core.widget.addTextChangedListener
+import androidx.core.widget.NestedScrollView
 import com.bumptech.glide.Glide
 import com.google.android.material.chip.Chip
 import com.google.firebase.auth.FirebaseAuth
@@ -53,6 +57,11 @@ class CreateEventActivity : AppCompatActivity() {
     private val invitedUsers = mutableMapOf<String, InvitedUser>() // email -> InvitedUser
     private var isCheckingEmail = false
 
+    // Keyboard handling
+    private var keyboardLayoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
+    private var isKeyboardShowing = false
+    private val keyboardHandler = Handler(Looper.getMainLooper())
+
     data class InvitedUser(
         val email: String,
         val fullName: String,
@@ -71,14 +80,6 @@ class CreateEventActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Enable edge-to-edge display - EXACTLY like MainActivity
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        // Configure system bar appearance - EXACTLY like MainActivity
-        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-        insetsController.isAppearanceLightStatusBars = true
-        insetsController.isAppearanceLightNavigationBars = true
 
         binding = ActivityCreateEventBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -99,26 +100,139 @@ class CreateEventActivity : AppCompatActivity() {
             setupEditMode()
         }
 
-        // Apply system bar insets - EXACTLY like MainActivity
-        applySystemBarInsets()
-
         setupViews()
         setupInvitationFeature()
+
+        // NEW: Setup enhanced keyboard handling
+        setupKeyboardHandling()
+
+        // Setup touch handling to dismiss keyboard
+        setupTouchToDismissKeyboard()
     }
 
-    // COPIED EXACTLY from MainActivity
-    private fun applySystemBarInsets() {
-        val header = findViewById<View>(R.id.headerLayout)
-        ViewCompat.setOnApplyWindowInsetsListener(header) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.updatePadding(top = insets.top)
-            windowInsets
+    // NEW: Enhanced keyboard handling setup
+    private fun setupKeyboardHandling() {
+        // Add extra padding at the bottom of the scrollable content
+        // This ensures there's space to scroll the last field above the keyboard
+        binding.nestedScrollView.getChildAt(0).apply {
+            setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom + 300)
         }
 
-        ViewCompat.setOnApplyWindowInsetsListener(binding.nestedScrollView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.updatePadding(bottom = insets.bottom)
-            windowInsets
+        // Setup keyboard visibility listener
+        keyboardLayoutListener = ViewTreeObserver.OnGlobalLayoutListener {
+            val rect = Rect()
+            binding.root.getWindowVisibleDisplayFrame(rect)
+            val screenHeight = binding.root.rootView.height
+            val keypadHeight = screenHeight - rect.bottom
+
+            val isKeyboardNowShowing = keypadHeight > screenHeight * 0.15
+
+            if (isKeyboardNowShowing != isKeyboardShowing) {
+                isKeyboardShowing = isKeyboardNowShowing
+
+                if (isKeyboardShowing) {
+                    onKeyboardOpened(keypadHeight)
+                } else {
+                    onKeyboardClosed()
+                }
+            }
+        }
+
+        binding.root.viewTreeObserver.addOnGlobalLayoutListener(keyboardLayoutListener)
+    }
+
+    // NEW: Handle keyboard opened event
+    private fun onKeyboardOpened(keyboardHeight: Int) {
+        Log.d(TAG, "⌨️ Keyboard opened - Height: $keyboardHeight")
+
+        // Check if email input is focused
+        if (binding.emailInput.hasFocus()) {
+            // Delay to ensure keyboard is fully shown
+            keyboardHandler.postDelayed({
+                ensureEmailInputVisible()
+            }, 100)
+        }
+    }
+
+    // NEW: Handle keyboard closed event
+    private fun onKeyboardClosed() {
+        Log.d(TAG, "⌨️ Keyboard closed")
+        // Optionally scroll back to a neutral position
+    }
+
+    // NEW: Ensure email input is visible above keyboard
+    private fun ensureEmailInputVisible() {
+        // Get the email input's position
+        val emailInputLocation = IntArray(2)
+        binding.emailInput.getLocationOnScreen(emailInputLocation)
+
+        // Get the scroll view's position
+        val scrollViewLocation = IntArray(2)
+        binding.nestedScrollView.getLocationOnScreen(scrollViewLocation)
+
+        // Calculate the relative position of email input within scroll view
+        val emailInputTop = emailInputLocation[1] - scrollViewLocation[1] + binding.nestedScrollView.scrollY
+
+        // Get visible height (screen height - keyboard height)
+        val rect = Rect()
+        binding.root.getWindowVisibleDisplayFrame(rect)
+        val visibleHeight = rect.bottom - scrollViewLocation[1]
+
+        // Calculate desired scroll position
+        // We want the email input to be in the middle of the visible area
+        val desiredScrollY = emailInputTop - (visibleHeight / 2) + (binding.emailInput.height / 2)
+
+        Log.d(TAG, "📍 Email input position: top=$emailInputTop, visible height=$visibleHeight")
+        Log.d(TAG, "📍 Scrolling to position: $desiredScrollY")
+
+        // Smooth scroll to the calculated position
+        binding.nestedScrollView.smoothScrollTo(0, desiredScrollY.coerceAtLeast(0))
+    }
+
+    // Override to handle touch events for keyboard dismissal
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_DOWN) {
+            val v = currentFocus
+            if (v is android.widget.EditText) {
+                val outRect = Rect()
+                v.getGlobalVisibleRect(outRect)
+                if (!outRect.contains(event.rawX.toInt(), event.rawY.toInt())) {
+                    Log.d(TAG, "👆 Touch outside edit field - dismissing keyboard")
+                    hideKeyboard()
+                    v.clearFocus()
+                }
+            }
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    // Setup touch handling to dismiss keyboard
+    private fun setupTouchToDismissKeyboard() {
+        // Set touch listener on the main layout to dismiss keyboard when touching outside
+        binding.nestedScrollView.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                val v = currentFocus
+                if (v is android.widget.EditText) {
+                    val outRect = Rect()
+                    v.getGlobalVisibleRect(outRect)
+                    if (!outRect.contains(event.rawX.toInt(), event.rawY.toInt())) {
+                        Log.d(TAG, "👆 Touch on scroll view - dismissing keyboard")
+                        hideKeyboard()
+                        v.clearFocus()
+                        return@setOnTouchListener true
+                    }
+                }
+            }
+            false
+        }
+    }
+
+    // Hide keyboard helper
+    private fun hideKeyboard() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        val currentFocusView = currentFocus
+        if (currentFocusView != null) {
+            imm.hideSoftInputFromWindow(currentFocusView.windowToken, 0)
         }
     }
 
@@ -166,7 +280,7 @@ class CreateEventActivity : AppCompatActivity() {
     }
 
     private fun setupViews() {
-        // Updated back button setup - now using ImageView like ProfileActivity
+        // Back button setup
         binding.backButton.setOnClickListener { finish() }
 
         binding.dateInput.setOnClickListener { showDatePicker() }
@@ -181,17 +295,55 @@ class CreateEventActivity : AppCompatActivity() {
     }
 
     private fun setupInvitationFeature() {
-        // Toggle invite section visibility
+        // Auto-scroll when invite section opens
         binding.invitePeopleHeader.setOnClickListener {
             val isVisible = binding.inviteSection.visibility == View.VISIBLE
-            binding.inviteSection.visibility = if (isVisible) View.GONE else View.VISIBLE
-            binding.inviteArrow.rotation = if (isVisible) 0f else 180f
+
+            if (!isVisible) {
+                // Show the section first
+                binding.inviteSection.visibility = View.VISIBLE
+                binding.inviteArrow.rotation = 180f
+
+                Log.d(TAG, "📧 Invite section opened - auto-scrolling to show it")
+
+                // Auto-scroll to show the invite section with extra consideration for keyboard
+                binding.nestedScrollView.post {
+                    val padding = 100 // Increased padding
+                    val targetY = binding.invitePeopleHeader.top - padding
+
+                    binding.nestedScrollView.smoothScrollTo(0, targetY)
+                    Log.d(TAG, "🔄 Scrolled to show invite section at position: $targetY")
+
+                    // Focus on email input after scrolling
+                    keyboardHandler.postDelayed({
+                        binding.emailInput.requestFocus()
+                        showKeyboard(binding.emailInput)
+                    }, 300)
+                }
+            } else {
+                // Hide the section
+                binding.inviteSection.visibility = View.GONE
+                binding.inviteArrow.rotation = 0f
+                hideKeyboard()
+                binding.emailInput.clearFocus()
+                Log.d(TAG, "📧 Invite section closed")
+            }
         }
 
         // Clear email input error when user starts typing
         binding.emailInput.addTextChangedListener {
             binding.emailInputLayout.error = null
             binding.emailValidationIcon.visibility = View.GONE
+        }
+
+        // NEW: Enhanced focus handling for email input
+        binding.emailInput.setOnFocusChangeListener { view, hasFocus ->
+            if (hasFocus) {
+                Log.d(TAG, "📧 Email input focused - ensuring visibility")
+                keyboardHandler.postDelayed({
+                    ensureEmailInputVisible()
+                }, 200)
+            }
         }
 
         // Handle email input
@@ -216,97 +368,11 @@ class CreateEventActivity : AppCompatActivity() {
         }
     }
 
-    private fun validateAndAddEmail(email: String) {
-        Log.d(TAG, "👤 Validating email for invitation: ${maskEmailForLogging(email)}")
-
-        // Basic email validation
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            binding.emailInputLayout.error = "Please enter a valid email address"
-            Log.w(TAG, "❌ Invalid email format: ${maskEmailForLogging(email)}")
-            return
-        }
-
-        // Check if already invited
-        if (invitedUsers.containsKey(email)) {
-            binding.emailInputLayout.error = "This person is already invited"
-            Log.w(TAG, "⚠️ Email already invited: ${maskEmailForLogging(email)}")
-            return
-        }
-
-        // Check if it's the current user's email
-        if (email == auth.currentUser?.email) {
-            binding.emailInputLayout.error = "You cannot invite yourself"
-            Log.w(TAG, "⚠️ User tried to invite themselves: ${maskEmailForLogging(email)}")
-            return
-        }
-
-        // Show loading state
-        isCheckingEmail = true
-        binding.emailValidationIcon.visibility = View.VISIBLE
-        binding.emailValidationIcon.setImageResource(R.drawable.ic_loading)
-        binding.addEmailButton.isEnabled = false
-
-        Log.d(TAG, "🔍 Checking if user exists in database: ${maskEmailForLogging(email)}")
-
-        // Check if user exists in database
-        database.reference.child("users")
-            .orderByChild("email")
-            .equalTo(email)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    isCheckingEmail = false
-                    binding.addEmailButton.isEnabled = true
-
-                    if (snapshot.exists()) {
-                        // User found
-                        val userSnapshot = snapshot.children.first()
-                        val userId = userSnapshot.key ?: ""
-                        val fullName = userSnapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
-                        val profileImageUrl = userSnapshot.child("profileImageUrl").getValue(String::class.java)
-
-                        Log.d(TAG, "✅ User found in database:")
-                        Log.d(TAG, "   Email: ${maskEmailForLogging(email)}")
-                        Log.d(TAG, "   Name: $fullName")
-                        Log.d(TAG, "   User ID: $userId")
-
-                        val invitedUser = InvitedUser(email, fullName, userId, profileImageUrl)
-                        invitedUsers[email] = invitedUser
-
-                        // Show success and add chip
-                        binding.emailValidationIcon.setImageResource(R.drawable.ic_check_circle)
-                        binding.emailValidationIcon.visibility = View.VISIBLE
-
-                        // Add chip and clear input
-                        addInvitedUserChip(invitedUser)
-                        binding.emailInput.setText("")
-
-                        // Hide success icon after a moment
-                        binding.emailValidationIcon.postDelayed({
-                            binding.emailValidationIcon.visibility = View.GONE
-                        }, 1500)
-
-                    } else {
-                        // User not found
-                        Log.w(TAG, "❌ User not found in database: ${maskEmailForLogging(email)}")
-                        binding.emailInputLayout.error = "User not found. Make sure they have an account."
-                        binding.emailValidationIcon.setImageResource(R.drawable.ic_error)
-                        binding.emailValidationIcon.visibility = View.VISIBLE
-
-                        // Hide error icon after a moment
-                        binding.emailValidationIcon.postDelayed({
-                            binding.emailValidationIcon.visibility = View.GONE
-                        }, 3000)
-                    }
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    isCheckingEmail = false
-                    binding.addEmailButton.isEnabled = true
-                    Log.e(TAG, "❌ Database error checking user: ${error.message}")
-                    binding.emailInputLayout.error = "Error checking user. Please try again."
-                    binding.emailValidationIcon.visibility = View.GONE
-                }
-            })
+    // NEW: Show keyboard helper
+    private fun showKeyboard(view: View) {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        view.requestFocus()
+        imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
     }
 
     private fun addInvitedUserChip(invitedUser: InvitedUser) {
@@ -841,8 +907,6 @@ class CreateEventActivity : AppCompatActivity() {
         }
     }
 
-    // Rest of your existing methods (showDatePicker, showTimePicker, etc.) remain the same...
-
     private fun showDatePicker() {
         val calendar = Calendar.getInstance()
         if (isEditMode && selectedDate.isNotEmpty()) {
@@ -1005,5 +1069,109 @@ class CreateEventActivity : AppCompatActivity() {
         } catch (e: Exception) {
             ""
         }
+    }
+
+    private fun validateAndAddEmail(email: String) {
+        Log.d(TAG, "👤 Validating email for invitation: ${maskEmailForLogging(email)}")
+
+        // Basic email validation
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            binding.emailInputLayout.error = "Please enter a valid email address"
+            Log.w(TAG, "❌ Invalid email format: ${maskEmailForLogging(email)}")
+            return
+        }
+
+        // Check if already invited
+        if (invitedUsers.containsKey(email)) {
+            binding.emailInputLayout.error = "This person is already invited"
+            Log.w(TAG, "⚠️ Email already invited: ${maskEmailForLogging(email)}")
+            return
+        }
+
+        // Check if it's the current user's email
+        if (email == auth.currentUser?.email) {
+            binding.emailInputLayout.error = "You cannot invite yourself"
+            Log.w(TAG, "⚠️ User tried to invite themselves: ${maskEmailForLogging(email)}")
+            return
+        }
+
+        // Show loading state
+        isCheckingEmail = true
+        binding.emailValidationIcon.visibility = View.VISIBLE
+        binding.emailValidationIcon.setImageResource(R.drawable.ic_loading)
+        binding.addEmailButton.isEnabled = false
+
+        Log.d(TAG, "🔍 Checking if user exists in database: ${maskEmailForLogging(email)}")
+
+        // Check if user exists in database
+        database.reference.child("users")
+            .orderByChild("email")
+            .equalTo(email)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    isCheckingEmail = false
+                    binding.addEmailButton.isEnabled = true
+
+                    if (snapshot.exists()) {
+                        // User found
+                        val userSnapshot = snapshot.children.first()
+                        val userId = userSnapshot.key ?: ""
+                        val fullName = userSnapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+                        val profileImageUrl = userSnapshot.child("profileImageUrl").getValue(String::class.java)
+
+                        Log.d(TAG, "✅ User found in database:")
+                        Log.d(TAG, "   Email: ${maskEmailForLogging(email)}")
+                        Log.d(TAG, "   Name: $fullName")
+                        Log.d(TAG, "   User ID: $userId")
+
+                        val invitedUser = InvitedUser(email, fullName, userId, profileImageUrl)
+                        invitedUsers[email] = invitedUser
+
+                        // Show success and add chip
+                        binding.emailValidationIcon.setImageResource(R.drawable.ic_check_circle)
+                        binding.emailValidationIcon.visibility = View.VISIBLE
+
+                        // Add chip and clear input
+                        addInvitedUserChip(invitedUser)
+                        binding.emailInput.setText("")
+
+                        // Hide success icon after a moment
+                        binding.emailValidationIcon.postDelayed({
+                            binding.emailValidationIcon.visibility = View.GONE
+                        }, 1500)
+
+                    } else {
+                        // User not found
+                        Log.w(TAG, "❌ User not found in database: ${maskEmailForLogging(email)}")
+                        binding.emailInputLayout.error = "User not found. Make sure they have an account."
+                        binding.emailValidationIcon.setImageResource(R.drawable.ic_error)
+                        binding.emailValidationIcon.visibility = View.VISIBLE
+
+                        // Hide error icon after a moment
+                        binding.emailValidationIcon.postDelayed({
+                            binding.emailValidationIcon.visibility = View.GONE
+                        }, 3000)
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    isCheckingEmail = false
+                    binding.addEmailButton.isEnabled = true
+                    Log.e(TAG, "❌ Database error checking user: ${error.message}")
+                    binding.emailInputLayout.error = "Error checking user. Please try again."
+                    binding.emailValidationIcon.visibility = View.GONE
+                }
+            })
+    }
+
+    // ... [Include all other methods from the original file - they remain unchanged] ...
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clean up keyboard listener
+        keyboardLayoutListener?.let {
+            binding.root.viewTreeObserver.removeOnGlobalLayoutListener(it)
+        }
+        keyboardHandler.removeCallbacksAndMessages(null)
     }
 }

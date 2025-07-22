@@ -6,6 +6,7 @@
     android:layout_height="match_parent"
     android:background="#f8f9fa"
     android:orientation="vertical"
+    android:fitsSystemWindows="true"
     tools:context=".CreateEventActivity">
 
     <!-- Header - EXACTLY like ProfileActivity -->
@@ -49,19 +50,22 @@
 
     </LinearLayout>
 
-    <!-- Scrollable Content -->
-    <ScrollView
+    <!-- Changed from ScrollView to NestedScrollView for better keyboard handling -->
+    <androidx.core.widget.NestedScrollView
         android:id="@+id/nestedScrollView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:clipToPadding="false"
+        android:scrollbarStyle="outsideOverlay">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="16dp"
+            android:clipToPadding="false">
 
             <!-- Form Card -->
             <androidx.cardview.widget.CardView
@@ -75,7 +79,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="24dp">
+                    android:padding="24dp"
+                    android:animateLayoutChanges="true">
 
                     <!-- Event Title -->
                     <com.google.android.material.textfield.TextInputLayout
@@ -279,7 +284,8 @@
                         android:visibility="gone"
                         android:layout_marginBottom="16dp"
                         android:background="@color/app_secondary_bg"
-                        android:padding="16dp">
+                        android:padding="16dp"
+                        android:focusableInTouchMode="true">
 
                         <TextView
                             android:layout_width="match_parent"
@@ -311,7 +317,8 @@
                                     android:layout_height="wrap_content"
                                     android:inputType="textEmailAddress"
                                     android:imeOptions="actionDone"
-                                    android:maxLines="1" />
+                                    android:maxLines="1"
+                                    android:privateImeOptions="nm" />
 
                             </com.google.android.material.textfield.TextInputLayout>
 
@@ -382,7 +389,7 @@
                             android:layout_marginStart="8dp"
                             android:layout_weight="1">
 
-                            <!-- FIXED: Create/Save Changes button with proper text visibility -->
+                            <!-- Create/Save Changes button -->
                             <Button
                                 android:id="@+id/createButton"
                                 android:layout_width="match_parent"
@@ -408,8 +415,14 @@
                                 android:visibility="gone" />
                         </FrameLayout>
                     </LinearLayout>
+
+                    <!-- IMPORTANT: Extra padding view for keyboard space -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="200dp" />
+
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
         </LinearLayout>
-    </ScrollView>
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>
