@@ -33,7 +33,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.bumptech.glide.Glide
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.tabs.TabLayout
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -49,15 +48,16 @@ import java.util.*
 class ProfileActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityProfileBinding
-    private lateinit var eventsAdapter: EventsAdapter
+    private lateinit var upcomingEventsAdapter: EventsAdapter
+    private lateinit var pastEventsAdapter: EventsAdapter
     private lateinit var auth: FirebaseAuth
     private lateinit var database: FirebaseDatabase
     private lateinit var storage: FirebaseStorage
 
-    private val organizedEvents = mutableListOf<Event>()
-    private val attendingEvents = mutableListOf<Event>()
+    // Event lists
+    private val upcomingEvents = mutableListOf<Event>()
+    private val pastEvents = mutableListOf<Event>()
 
-    private var currentTab = 0 // 0: Organised, 1: Attending
     private var currentUserId: String? = null
     private var currentUser: FirebaseUser? = null
 
@@ -87,14 +87,12 @@ class ProfileActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Enable edge-to-edge display - EXACTLY like MainActivity
+        // Enable edge-to-edge display
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // EXACTLY like MainActivity - Programmatically control the system bar appearance
+        // Control system bar appearance
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-        // This tells the system that the content behind the status bar is light, so icons should be dark
         insetsController.isAppearanceLightStatusBars = true
-        // This tells the system that the content behind the navigation bar is light, so the handle should be dark
         insetsController.isAppearanceLightNavigationBars = true
 
         try {
@@ -116,13 +114,12 @@ class ProfileActivity : AppCompatActivity() {
 
             Log.d(TAG, "ProfileActivity created successfully")
 
-            // EXACTLY like MainActivity - apply system bar insets
+            // Apply system bar insets
             applySystemBarInsets()
 
             setupViews()
-            setupRecyclerView()
-            setupTabLayout()
-            setupSwipeRefresh()  // NEW: Setup pull-to-refresh
+            setupRecyclerViews()
+            setupSwipeRefresh()
             loadUserProfile()
             loadUserEvents()
 
@@ -132,7 +129,6 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    // COPIED EXACTLY from MainActivity
     private fun applySystemBarInsets() {
         val header = findViewById<View>(R.id.headerLayout)
         ViewCompat.setOnApplyWindowInsetsListener(header) { view, windowInsets ->
@@ -148,7 +144,6 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Setup SwipeRefreshLayout
     private fun setupSwipeRefresh() {
         binding.swipeRefreshLayout.setColorSchemeResources(
             R.color.app_primary_blue,
@@ -161,13 +156,12 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Refresh all data
     private fun refreshAllData() {
         Log.d(TAG, "Refreshing profile data...")
 
         // Clear existing data
-        organizedEvents.clear()
-        attendingEvents.clear()
+        upcomingEvents.clear()
+        pastEvents.clear()
 
         // Reload profile and events
         loadUserProfile()
@@ -176,7 +170,7 @@ class ProfileActivity : AppCompatActivity() {
 
     private fun setupViews() {
         try {
-            // Back button - now using ImageView
+            // Back button
             binding.backButton.setOnClickListener {
                 finish()
             }
@@ -200,9 +194,10 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupRecyclerView() {
+    private fun setupRecyclerViews() {
         try {
-            eventsAdapter = EventsAdapter(
+            // Upcoming events adapter
+            upcomingEventsAdapter = EventsAdapter(
                 events = emptyList(),
                 currentUserId = currentUserId ?: "",
                 onEventClick = { event ->
@@ -242,33 +237,33 @@ class ProfileActivity : AppCompatActivity() {
                 }
             )
 
-            binding.profileEventsRecyclerView.apply {
+            // Past events adapter
+            pastEventsAdapter = EventsAdapter(
+                events = emptyList(),
+                currentUserId = currentUserId ?: "",
+                onEventClick = { event ->
+                    Log.d(TAG, "Past event clicked: ${event.title}")
+                    showCustomEventDetails(event)
+                },
+                onEditClick = { /* Edit not available for past events */ },
+                onCancelClick = { /* Cancel not available for past events */ },
+                onRsvpClick = { /* RSVP not available for past events */ },
+                onCancelRsvpClick = { /* Cancel RSVP not available for past events */ }
+            )
+
+            // Set up RecyclerViews
+            binding.upcomingEventsRecyclerView.apply {
                 layoutManager = LinearLayoutManager(this@ProfileActivity)
-                adapter = eventsAdapter
+                adapter = upcomingEventsAdapter
+            }
+
+            binding.pastEventsRecyclerView.apply {
+                layoutManager = LinearLayoutManager(this@ProfileActivity)
+                adapter = pastEventsAdapter
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error setting up RecyclerView: ${e.message}", e)
-        }
-    }
-
-    private fun setupTabLayout() {
-        try {
-            binding.eventsTabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-                override fun onTabSelected(tab: TabLayout.Tab?) {
-                    tab?.let {
-                        currentTab = it.position
-                        Log.d(TAG, "Tab selected: $currentTab")
-                        updateEventsForTab(currentTab)
-                    }
-                }
-
-                override fun onTabUnselected(tab: TabLayout.Tab?) {}
-                override fun onTabReselected(tab: TabLayout.Tab?) {}
-            })
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting up TabLayout: ${e.message}", e)
+            Log.e(TAG, "Error setting up RecyclerViews: ${e.message}", e)
         }
     }
 
@@ -295,9 +290,6 @@ class ProfileActivity : AppCompatActivity() {
 
                                 // Load profile image
                                 loadProfileImage(profileImageUrl)
-
-                                // Update counts in calendar section
-                                updateCalendarCounts()
 
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error processing user profile data: ${e.message}", e)
@@ -348,33 +340,42 @@ class ProfileActivity : AppCompatActivity() {
                     .addListenerForSingleValueEvent(object : ValueEventListener {
                         override fun onDataChange(eventsSnapshot: DataSnapshot) {
                             try {
-                                organizedEvents.clear()
-                                attendingEvents.clear()
+                                upcomingEvents.clear()
+                                pastEvents.clear()
+
+                                val currentTime = System.currentTimeMillis() / 1000 // Current time in seconds
 
                                 for (eventSnapshot in eventsSnapshot.children) {
                                     val event = eventSnapshot.getValue(Event::class.java)
                                     event?.let {
                                         it.id = eventSnapshot.key ?: ""
 
-                                        if (it.organizer?.uid == uid) {
-                                            organizedEvents.add(it)
-                                            Log.d(TAG, "Added to organized: ${it.title}")
-                                        } else if (it.attendees.containsKey(uid)) {
-                                            attendingEvents.add(it)
-                                            Log.d(TAG, "Added to attending: ${it.title}")
+                                        // Include events where user is organizer OR attendee
+                                        val isOrganizer = it.organizer?.uid == uid
+                                        val isAttendee = it.attendees.containsKey(uid)
+
+                                        if (isOrganizer || isAttendee) {
+                                            // Filter by time: upcoming vs past
+                                            val eventTime = it.dateTime?.seconds ?: Long.MAX_VALUE
+                                            if (eventTime > currentTime) {
+                                                upcomingEvents.add(it)
+                                                Log.d(TAG, "Added to upcoming: ${it.title}")
+                                            } else {
+                                                pastEvents.add(it)
+                                                Log.d(TAG, "Added to past: ${it.title}")
+                                            }
                                         }
                                     }
                                 }
 
-                                // Sort events by date (newest first)
-                                organizedEvents.sortBy { it.dateTime?.seconds ?: 0 }
-                                attendingEvents.sortBy { it.dateTime?.seconds ?: 0 }
+                                // Sort events by date
+                                upcomingEvents.sortBy { it.dateTime?.seconds ?: 0 }
+                                pastEvents.sortByDescending { it.dateTime?.seconds ?: 0 } // Recent first for past events
 
-                                Log.d(TAG, "Final counts - Organized: ${organizedEvents.size}, Attending: ${attendingEvents.size}")
+                                Log.d(TAG, "Final counts - Upcoming: ${upcomingEvents.size}, Past: ${pastEvents.size}")
 
-                                updateTabCounts()
-                                updateEventsForTab(currentTab)
-                                updateCalendarCounts()
+                                updateEventsList()
+                                updateTotalEventsCount()
 
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error processing events data: ${e.message}", e)
@@ -398,75 +399,37 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Update calendar counts
-    private fun updateCalendarCounts() {
+    private fun updateEventsList() {
         try {
-            val currentMonth = Calendar.getInstance().get(Calendar.MONTH)
-            val currentYear = Calendar.getInstance().get(Calendar.YEAR)
-
-            var thisMonthCount = 0
-            (organizedEvents + attendingEvents).forEach { event ->
-                event.dateTime?.seconds?.let { seconds ->
-                    val eventDate = Calendar.getInstance().apply {
-                        timeInMillis = seconds * 1000
-                    }
-                    if (eventDate.get(Calendar.MONTH) == currentMonth &&
-                        eventDate.get(Calendar.YEAR) == currentYear) {
-                        thisMonthCount++
-                    }
-                }
-            }
-
-            binding.apply {
-                organizedCountText.text = organizedEvents.size.toString()
-                attendingCountText.text = attendingEvents.size.toString()
-                thisMonthCountText.text = thisMonthCount.toString()
-            }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating calendar counts: ${e.message}", e)
-        }
-    }
-
-    private fun updateTabCounts() {
-        try {
-            val tabLayout = binding.eventsTabLayout
-            tabLayout.getTabAt(0)?.text = "Organized (${organizedEvents.size})"
-            tabLayout.getTabAt(1)?.text = "Attending (${attendingEvents.size})"
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating tab counts: ${e.message}", e)
-        }
-    }
-
-    private fun updateEventsForTab(tabPosition: Int) {
-        try {
-            val filteredEvents = when (tabPosition) {
-                0 -> organizedEvents
-                1 -> attendingEvents
-                else -> emptyList()
-            }
-
-            Log.d(TAG, "Updating events for tab $tabPosition, count: ${filteredEvents.size}")
-
-            if (filteredEvents.isEmpty()) {
-                binding.emptyStateLayout.visibility = View.VISIBLE
-                binding.profileEventsRecyclerView.visibility = View.GONE
-
-                val emptyText = when (tabPosition) {
-                    0 -> "You haven't organized any events yet."
-                    1 -> "You are not attending any events."
-                    else -> "No events available."
-                }
-                binding.emptyStateText.text = emptyText
+            // Update upcoming events
+            if (upcomingEvents.isEmpty()) {
+                binding.upcomingEventsRecyclerView.visibility = View.GONE
+                binding.upcomingEmptyState.visibility = View.VISIBLE
             } else {
-                binding.emptyStateLayout.visibility = View.GONE
-                binding.profileEventsRecyclerView.visibility = View.VISIBLE
-                eventsAdapter.updateEvents(filteredEvents)
+                binding.upcomingEventsRecyclerView.visibility = View.VISIBLE
+                binding.upcomingEmptyState.visibility = View.GONE
+                upcomingEventsAdapter.updateEvents(upcomingEvents)
+            }
+
+            // Update past events
+            if (pastEvents.isEmpty()) {
+                binding.pastEventsRecyclerView.visibility = View.GONE
+                binding.pastEmptyState.visibility = View.VISIBLE
+            } else {
+                binding.pastEventsRecyclerView.visibility = View.VISIBLE
+                binding.pastEmptyState.visibility = View.GONE
+                pastEventsAdapter.updateEvents(pastEvents)
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error updating events for tab: ${e.message}", e)
+            Log.e(TAG, "Error updating events list: ${e.message}", e)
         }
+    }
+
+    private fun updateTotalEventsCount() {
+        val totalEvents = upcomingEvents.size + pastEvents.size
+        binding.totalEventsText.text = "$totalEvents Total Events"
+        Log.d(TAG, "Updated total events count: $totalEvents")
     }
 
     // ========================================
@@ -721,21 +684,25 @@ class ProfileActivity : AppCompatActivity() {
 
     private fun handleRsvp(event: Event) {
         currentUserId?.let { uid ->
-            val currentUser = auth.currentUser
-            val userName = currentUser?.displayName ?: "A User"
-            val updates = hashMapOf<String, Any>(
-                "events/${event.id}/attendees/$uid/fullName" to userName,
-                "events/${event.id}/attendees/$uid/profileImageUrl" to (currentUser?.photoUrl?.toString() ?: ""),
-                "events/${event.id}/attendeesCount" to event.attendeesCount + 1
-            )
-            database.reference.updateChildren(updates)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
-                    loadUserEvents() // Refresh events
-                }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Failed to RSVP", Toast.LENGTH_SHORT).show()
-                }
+            database.reference.child("users").child(uid).get().addOnSuccessListener { snapshot ->
+                val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+                val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+
+                val updates = hashMapOf<String, Any>(
+                    "events/${event.id}/attendees/$uid/fullName" to fullName,
+                    "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
+                    "events/${event.id}/attendeesCount" to event.attendeesCount + 1
+                )
+
+                database.reference.updateChildren(updates)
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
+                        loadUserEvents() // Refresh events
+                    }
+                    .addOnFailureListener {
+                        Toast.makeText(this, "Failed to RSVP", Toast.LENGTH_SHORT).show()
+                    }
+            }
         }
     }
 
@@ -786,7 +753,7 @@ class ProfileActivity : AppCompatActivity() {
     }
 
     // ========================================
-    // EVENT DETAILS POPUP (SAME AS MAIN ACTIVITY)
+    // EVENT DETAILS POPUP
     // ========================================
 
     private fun showCustomEventDetails(event: Event) {
@@ -818,7 +785,7 @@ class ProfileActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.descriptionText).text = event.description
         view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
 
-        // UPDATED: Handle organizer section with click functionality
+        // Handle organizer section with click functionality
         val organizerText = view.findViewById<TextView>(R.id.organizerText)
         val organizerClickableSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
         val organizerHintText = view.findViewById<TextView>(R.id.organizerHintText)
@@ -865,6 +832,10 @@ class ProfileActivity : AppCompatActivity() {
             organizerHintText.visibility = View.GONE
             organizerArrow.visibility = View.GONE
         }
+
+        // Hide RSVP buttons in event details for profile view
+        val actionButtonsContainer = view.findViewById<LinearLayout>(R.id.actionButtonsContainer)
+        actionButtonsContainer.visibility = View.GONE
     }
 
     private fun animateDetailsIn(detailsView: View) {

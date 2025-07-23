@@ -29,7 +29,7 @@
                 android:paddingBottom="8dp"
                 android:gravity="center_vertical">
 
-                <!-- ONLY FIXED: Back Button to show arrow properly -->
+                <!-- Back Button -->
                 <ImageView
                     android:id="@+id/backButton"
                     android:layout_width="40dp"
@@ -54,7 +54,7 @@
 
             </LinearLayout>
 
-            <!-- NEW: Wrap NestedScrollView in SwipeRefreshLayout -->
+            <!-- SwipeRefreshLayout -->
             <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
                 android:id="@+id/swipeRefreshLayout"
                 android:layout_width="match_parent"
@@ -152,6 +152,15 @@
                                     android:textSize="16sp" />
 
                                 <TextView
+                                    android:id="@+id/totalEventsText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="0 Total Events"
+                                    android:textColor="@color/app_text_secondary"
+                                    android:textSize="14sp" />
+
+                                <TextView
                                     android:id="@+id/profileAboutText"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
@@ -196,168 +205,7 @@
 
                         </androidx.cardview.widget.CardView>
 
-                        <!-- Calendar Card -->
-                        <androidx.cardview.widget.CardView
-                            xmlns:android="http://schemas.android.com/apk/res/android"
-                            xmlns:app="http://schemas.android.com/apk/res-auto"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="16dp"
-                            app:cardBackgroundColor="@android:color/white"
-                            app:cardCornerRadius="12dp"
-                            app:cardElevation="2dp">
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:orientation="vertical"
-                                android:padding="20dp">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="Upcoming Events"
-                                    android:textColor="@color/app_text_primary"
-                                    android:textSize="18sp"
-                                    android:textStyle="bold" />
-
-                                <!-- Calendar View -->
-                                <CalendarView
-                                    android:id="@+id/calendarView"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="300dp"
-                                    android:layout_marginTop="16dp"
-                                    android:layout_marginBottom="16dp" />
-
-                                <!-- Event Summary -->
-                                <LinearLayout
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:orientation="horizontal"
-                                    android:background="@color/app_placeholder_background"
-                                    android:padding="16dp"
-                                    android:layout_marginTop="8dp">
-
-                                    <LinearLayout
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:orientation="vertical"
-                                        android:gravity="center">
-
-                                        <TextView
-                                            android:id="@+id/organizedCountText"
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:text="0"
-                                            android:textColor="@color/app_primary_blue"
-                                            android:textSize="24sp"
-                                            android:textStyle="bold" />
-
-                                        <TextView
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:text="My Events"
-                                            android:textColor="@color/app_text_secondary"
-                                            android:textSize="12sp" />
-
-                                    </LinearLayout>
-
-                                    <View
-                                        android:layout_width="1dp"
-                                        android:layout_height="match_parent"
-                                        android:background="@color/app_divider" />
-
-                                    <LinearLayout
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:orientation="vertical"
-                                        android:gravity="center">
-
-                                        <TextView
-                                            android:id="@+id/attendingCountText"
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:text="0"
-                                            android:textColor="@color/app_success"
-                                            android:textSize="24sp"
-                                            android:textStyle="bold" />
-
-                                        <TextView
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:text="Attending"
-                                            android:textColor="@color/app_text_secondary"
-                                            android:textSize="12sp" />
-
-                                    </LinearLayout>
-
-                                    <View
-                                        android:layout_width="1dp"
-                                        android:layout_height="match_parent"
-                                        android:background="@color/app_divider" />
-
-                                    <LinearLayout
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:orientation="vertical"
-                                        android:gravity="center">
-
-                                        <TextView
-                                            android:id="@+id/thisMonthCountText"
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:text="0"
-                                            android:textColor="@color/app_accent"
-                                            android:textSize="24sp"
-                                            android:textStyle="bold" />
-
-                                        <TextView
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:text="This Month"
-                                            android:textColor="@color/app_text_secondary"
-                                            android:textSize="12sp" />
-
-                                    </LinearLayout>
-
-                                </LinearLayout>
-
-                                <!-- Quick Actions -->
-                                <LinearLayout
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:orientation="horizontal"
-                                    android:layout_marginTop="16dp">
-
-                                    <Button
-                                        android:id="@+id/viewTodayButton"
-                                        style="@style/Widget.MaterialComponents.Button.TextButton"
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:layout_marginEnd="8dp"
-                                        android:text="Today"
-                                        android:textColor="@color/app_primary_blue" />
-
-                                    <Button
-                                        android:id="@+id/viewWeekButton"
-                                        style="@style/Widget.MaterialComponents.Button.TextButton"
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:text="This Week"
-                                        android:textColor="@color/app_primary_blue" />
-
-                                </LinearLayout>
-
-                            </LinearLayout>
-
-                        </androidx.cardview.widget.CardView>
-
-                        <!-- Events Card -->
+                        <!-- Events Card - Now matching PublicProfileActivity exactly -->
                         <androidx.cardview.widget.CardView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -371,64 +219,156 @@
                                 android:orientation="vertical"
                                 android:padding="20dp">
 
-                                <!-- ONLY 2 TABS: Organised and Attending -->
-                                <com.google.android.material.tabs.TabLayout
-                                    android:id="@+id/eventsTabLayout"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    app:tabGravity="fill"
-                                    app:tabIndicatorColor="@color/app_primary_blue"
-                                    app:tabMode="fixed"
-                                    app:tabSelectedTextColor="@color/app_primary_blue"
-                                    app:tabTextColor="@color/app_text_secondary">
-
-                                    <com.google.android.material.tabs.TabItem
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="My Events (0)" />
-
-                                    <com.google.android.material.tabs.TabItem
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Attending (0)" />
-
-                                    <!-- REMOVED: Past Events Tab -->
-
-                                </com.google.android.material.tabs.TabLayout>
-
-                                <!-- Events Grid -->
-                                <androidx.recyclerview.widget.RecyclerView
-                                    android:id="@+id/profileEventsRecyclerView"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="16dp"
-                                    android:nestedScrollingEnabled="false" />
-
-                                <!-- Empty State -->
+                                <!-- Events Sections -->
                                 <LinearLayout
-                                    android:id="@+id/emptyStateLayout"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="32dp"
-                                    android:layout_marginBottom="32dp"
-                                    android:gravity="center"
-                                    android:orientation="vertical"
-                                    android:visibility="gone">
+                                    android:orientation="vertical">
 
-                                    <ImageView
-                                        android:layout_width="48dp"
-                                        android:layout_height="48dp"
-                                        android:src="@drawable/ic_calendar"
-                                        app:tint="@color/app_text_tertiary" />
-
-                                    <TextView
-                                        android:id="@+id/emptyStateText"
-                                        android:layout_width="wrap_content"
+                                    <!-- Upcoming Events Section -->
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
-                                        android:layout_marginTop="12dp"
-                                        android:text="No events in this category yet."
-                                        android:textColor="@color/app_text_secondary"
-                                        android:textSize="16sp" />
+                                        android:orientation="horizontal"
+                                        android:gravity="center_vertical"
+                                        android:layout_marginBottom="12dp">
+
+                                        <ImageView
+                                            android:layout_width="24dp"
+                                            android:layout_height="24dp"
+                                            android:src="@drawable/ic_calendar"
+                                            app:tint="@color/app_primary_blue"
+                                            android:layout_marginEnd="8dp" />
+
+                                        <TextView
+                                            android:layout_width="0dp"
+                                            android:layout_height="wrap_content"
+                                            android:layout_weight="1"
+                                            android:text="Upcoming Events"
+                                            android:textColor="@color/app_text_primary"
+                                            android:textSize="18sp"
+                                            android:textStyle="bold" />
+
+                                        <View
+                                            android:layout_width="0dp"
+                                            android:layout_height="2dp"
+                                            android:layout_weight="2"
+                                            android:layout_marginStart="16dp"
+                                            android:background="@color/app_primary_blue" />
+
+                                    </LinearLayout>
+
+                                    <!-- Upcoming Events List -->
+                                    <androidx.recyclerview.widget.RecyclerView
+                                        android:id="@+id/upcomingEventsRecyclerView"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginBottom="16dp"
+                                        android:nestedScrollingEnabled="false"
+                                        android:minHeight="100dp"
+                                        android:maxHeight="400dp" />
+
+                                    <!-- Empty State for Upcoming -->
+                                    <LinearLayout
+                                        android:id="@+id/upcomingEmptyState"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="100dp"
+                                        android:layout_marginBottom="16dp"
+                                        android:gravity="center"
+                                        android:orientation="horizontal"
+                                        android:background="@color/app_placeholder_background"
+                                        android:visibility="gone">
+
+                                        <ImageView
+                                            android:layout_width="32dp"
+                                            android:layout_height="32dp"
+                                            android:src="@drawable/ic_calendar"
+                                            app:tint="@color/app_text_tertiary"
+                                            android:layout_marginEnd="12dp" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="No upcoming events"
+                                            android:textColor="@color/app_text_secondary"
+                                            android:textSize="14sp" />
+
+                                    </LinearLayout>
+
+                                    <!-- Divider -->
+                                    <View
+                                        android:layout_width="match_parent"
+                                        android:layout_height="1dp"
+                                        android:background="@color/app_divider"
+                                        android:layout_marginVertical="16dp" />
+
+                                    <!-- Past Events Section -->
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:orientation="horizontal"
+                                        android:gravity="center_vertical"
+                                        android:layout_marginBottom="12dp">
+
+                                        <ImageView
+                                            android:layout_width="24dp"
+                                            android:layout_height="24dp"
+                                            android:src="@drawable/ic_event"
+                                            app:tint="@color/app_text_secondary"
+                                            android:layout_marginEnd="8dp" />
+
+                                        <TextView
+                                            android:layout_width="0dp"
+                                            android:layout_height="wrap_content"
+                                            android:layout_weight="1"
+                                            android:text="Past Events"
+                                            android:textColor="@color/app_text_primary"
+                                            android:textSize="18sp"
+                                            android:textStyle="bold" />
+
+                                        <View
+                                            android:layout_width="0dp"
+                                            android:layout_height="2dp"
+                                            android:layout_weight="2"
+                                            android:layout_marginStart="16dp"
+                                            android:background="@color/app_text_secondary" />
+
+                                    </LinearLayout>
+
+                                    <!-- Past Events List -->
+                                    <androidx.recyclerview.widget.RecyclerView
+                                        android:id="@+id/pastEventsRecyclerView"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:nestedScrollingEnabled="false"
+                                        android:minHeight="100dp"
+                                        android:maxHeight="400dp" />
+
+                                    <!-- Empty State for Past -->
+                                    <LinearLayout
+                                        android:id="@+id/pastEmptyState"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="100dp"
+                                        android:gravity="center"
+                                        android:orientation="horizontal"
+                                        android:background="@color/app_placeholder_background"
+                                        android:visibility="gone">
+
+                                        <ImageView
+                                            android:layout_width="32dp"
+                                            android:layout_height="32dp"
+                                            android:src="@drawable/ic_event"
+                                            app:tint="@color/app_text_tertiary"
+                                            android:layout_marginEnd="12dp" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="No past events to show"
+                                            android:textColor="@color/app_text_secondary"
+                                            android:textSize="14sp" />
+
+                                    </LinearLayout>
 
                                 </LinearLayout>
 
@@ -444,7 +384,7 @@
 
         </LinearLayout>
 
-        <!-- POPUP SUPPORT: Dark Scrim (same as MainActivity) -->
+        <!-- POPUP SUPPORT: Dark Scrim -->
         <View
             android:id="@+id/darkScrim"
             android:layout_width="match_parent"
@@ -453,7 +393,7 @@
             android:alpha="0"
             android:visibility="gone" />
 
-        <!-- POPUP SUPPORT: Event Details Container (same as MainActivity) -->
+        <!-- POPUP SUPPORT: Event Details Container -->
         <FrameLayout
             android:id="@+id/eventDetailsContainer"
             android:layout_width="match_parent"

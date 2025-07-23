@@ -1164,8 +1164,6 @@ class CreateEventActivity : AppCompatActivity() {
             })
     }
 
-    // ... [Include all other methods from the original file - they remain unchanged] ...
-
     override fun onDestroy() {
         super.onDestroy()
         // Clean up keyboard listener
