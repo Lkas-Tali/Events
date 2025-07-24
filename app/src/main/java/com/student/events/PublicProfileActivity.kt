@@ -54,13 +54,11 @@ class PublicProfileActivity : AppCompatActivity() {
     private var profileUserName: String? = null
     private var currentUserId: String? = null
 
-    // Real-time listeners like MainActivity
     private var userDataListener: ValueEventListener? = null
     private var userDataRef: DatabaseReference? = null
     private var eventsListener: ValueEventListener? = null
     private var eventsRef: DatabaseReference? = null
 
-    // Simple refresh state management
     private var isRefreshing = false
 
     companion object {
@@ -68,7 +66,6 @@ class PublicProfileActivity : AppCompatActivity() {
         private const val EXTRA_USER_ID = "user_id"
         private const val EXTRA_USER_NAME = "user_name"
 
-        // Email debugging flags
         private const val ENABLE_EMAIL_DEBUG = true
         private const val LOG_EMAIL_DETAILS = true
 
@@ -83,28 +80,23 @@ class PublicProfileActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Enable edge-to-edge display
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // Configure system bar appearance
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = true
         insetsController.isAppearanceLightNavigationBars = true
 
         try {
-            // Initialize Firebase
             auth = FirebaseAuth.getInstance()
             database = FirebaseDatabase.getInstance()
             emailService = EmailService(this)
             currentUserId = auth.currentUser?.uid
 
-            // Log EmailJS configuration for debugging
             if (ENABLE_EMAIL_DEBUG) {
                 Log.d(TAG, "📧 EMAIL DEBUG MODE ENABLED")
                 Log.d(TAG, emailService.getConfigurationInfo())
             }
 
-            // Simple auth check without complex listeners
             if (currentUserId == null) {
                 Log.e(TAG, "❌ User not authenticated")
                 Toast.makeText(this, "Please log in to view profiles", Toast.LENGTH_SHORT).show()
@@ -113,7 +105,6 @@ class PublicProfileActivity : AppCompatActivity() {
                 return
             }
 
-            // Get user data from intent
             profileUserId = intent.getStringExtra(EXTRA_USER_ID)
             profileUserName = intent.getStringExtra(EXTRA_USER_NAME)
 
@@ -128,19 +119,16 @@ class PublicProfileActivity : AppCompatActivity() {
             Log.d(TAG, "   Profile User Name: $profileUserName")
             Log.d(TAG, "   Current User ID: $currentUserId")
 
-            // Initialize data binding
             binding = DataBindingUtil.setContentView(this, R.layout.activity_public_profile)
 
             Log.d(TAG, "✅ PublicProfileActivity created successfully")
 
-            // Apply system bar insets
             applySystemBarInsets()
 
             setupViews()
             setupRecyclerViews()
             setupSwipeRefresh()
 
-            // Start real-time listeners like MainActivity
             setupRealTimeListeners()
 
         } catch (e: Exception) {
@@ -150,7 +138,6 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // Apply system bar insets
     private fun applySystemBarInsets() {
         val header = findViewById<View>(R.id.headerLayout)
         ViewCompat.setOnApplyWindowInsetsListener(header) { view, windowInsets ->
@@ -166,17 +153,14 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // Setup real-time listeners exactly like MainActivity
     private fun setupRealTimeListeners() {
         Log.d(TAG, "🔄 Setting up real-time listeners")
         setupUserDataListener()
         setupEventsListener()
     }
 
-    // Real-time user data listener like MainActivity
     private fun setupUserDataListener() {
         profileUserId?.let { uid ->
-            // Remove any existing listener first
             userDataListener?.let { listener ->
                 userDataRef?.removeEventListener(listener)
             }
@@ -195,7 +179,6 @@ class PublicProfileActivity : AppCompatActivity() {
                         Log.d(TAG, "   About: ${about?.take(50)}${if (about?.length ?: 0 > 50) "..." else ""}")
                         Log.d(TAG, "   Has Image: ${!profileImageUrl.isNullOrEmpty()}")
 
-                        // Update UI on main thread
                         runOnUiThread {
                             binding.apply {
                                 profileNameText.text = fullName ?: "User"
@@ -203,10 +186,8 @@ class PublicProfileActivity : AppCompatActivity() {
                                 headerTitle.text = fullName ?: "Profile"
                             }
 
-                            // Update profile user name for contact modal
                             profileUserName = fullName
 
-                            // Load profile image
                             loadProfileImage(profileImageUrl)
                         }
 
@@ -218,9 +199,7 @@ class PublicProfileActivity : AppCompatActivity() {
                 override fun onCancelled(error: DatabaseError) {
                     Log.e(TAG, "❌ Failed to load user profile: ${error.message}")
 
-                    // Handle specific errors without aggressive auth checks
                     runOnUiThread {
-                        // Set fallback data
                         binding.apply {
                             profileNameText.text = "User"
                             profileAboutText.text = "Welcome to my profile!"
@@ -238,9 +217,7 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // Real-time events listener like MainActivity
     private fun setupEventsListener() {
-        // Remove any existing listener first
         eventsListener?.let { listener ->
             eventsRef?.removeEventListener(listener)
         }
@@ -253,25 +230,20 @@ class PublicProfileActivity : AppCompatActivity() {
                 try {
                     Log.d(TAG, "📅 Events data changed. Total events: ${eventsSnapshot.childrenCount}")
 
-                    // Clear lists
                     upcomingEvents.clear()
                     pastEvents.clear()
 
-                    val currentTime = System.currentTimeMillis() / 1000 // Current time in seconds
+                    val currentTime = System.currentTimeMillis() / 1000
 
-                    // Process each event
                     for (eventSnapshot in eventsSnapshot.children) {
                         try {
                             val eventId = eventSnapshot.key ?: continue
                             Log.v(TAG, "   Processing event: $eventId")
 
-                            // Manual parsing to handle different data structures
                             val event = parseEventFromSnapshot(eventSnapshot, eventId)
 
                             if (event != null) {
-                                // Only include events organized by this user
                                 if (event.organizer?.uid == profileUserId) {
-                                    // Check if event is upcoming or past
                                     val eventTime = event.dateTime?.seconds ?: Long.MAX_VALUE
                                     if (eventTime > currentTime) {
                                         upcomingEvents.add(event)
@@ -291,16 +263,13 @@ class PublicProfileActivity : AppCompatActivity() {
 
                     Log.d(TAG, "📊 Final counts - Upcoming: ${upcomingEvents.size}, Past: ${pastEvents.size}")
 
-                    // Sort events by date
                     upcomingEvents.sortBy { it.dateTime?.seconds ?: 0 }
-                    pastEvents.sortByDescending { it.dateTime?.seconds ?: 0 } // Recent first for past events
+                    pastEvents.sortByDescending { it.dateTime?.seconds ?: 0 }
 
-                    // Update UI on main thread
                     runOnUiThread {
                         updateEventsList()
                         updateTotalEventsCount()
 
-                        // Stop refresh indicator
                         binding.swipeRefreshLayout.isRefreshing = false
                         isRefreshing = false
                     }
@@ -335,7 +304,6 @@ class PublicProfileActivity : AppCompatActivity() {
         eventsRef?.addValueEventListener(eventsListener!!)
     }
 
-    // Simple refresh without complex state management
     private fun setupSwipeRefresh() {
         binding.swipeRefreshLayout.setColorSchemeResources(
             R.color.app_primary_blue,
@@ -348,11 +316,8 @@ class PublicProfileActivity : AppCompatActivity() {
                 Log.d(TAG, "🔄 Pull-to-refresh triggered")
                 isRefreshing = true
 
-                // Simple refresh - just re-setup listeners
-                // The real-time listeners will automatically get fresh data
                 setupRealTimeListeners()
 
-                // Auto-stop refresh after 3 seconds as fallback
                 binding.swipeRefreshLayout.postDelayed({
                     binding.swipeRefreshLayout.isRefreshing = false
                     isRefreshing = false
@@ -361,7 +326,6 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // Manual event parsing to handle different data structures
     private fun parseEventFromSnapshot(snapshot: DataSnapshot, eventId: String): Event? {
         return try {
             val title = snapshot.child("title").getValue(String::class.java) ?: ""
@@ -371,7 +335,6 @@ class PublicProfileActivity : AppCompatActivity() {
             val imageUrl = snapshot.child("imageUrl").getValue(String::class.java)
             val attendeesCount = snapshot.child("attendeesCount").getValue(Int::class.java) ?: 0
 
-            // Parse organizer
             val organizerSnapshot = snapshot.child("organizer")
             val organizer = if (organizerSnapshot.exists()) {
                 com.student.events.models.Organizer(
@@ -380,10 +343,8 @@ class PublicProfileActivity : AppCompatActivity() {
                 )
             } else null
 
-            // Parse dateTime (handle both old and new formats)
             val dateTime = parseDateTime(snapshot)
 
-            // Parse attendees
             val attendeesMap = mutableMapOf<String, com.student.events.models.Attendee>()
             val attendeesSnapshot = snapshot.child("attendees")
             for (attendeeSnapshot in attendeesSnapshot.children) {
@@ -415,7 +376,6 @@ class PublicProfileActivity : AppCompatActivity() {
 
     private fun parseDateTime(snapshot: DataSnapshot): com.student.events.models.DateTime? {
         return try {
-            // Try new format first
             val dateTimeSnapshot = snapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
                 com.student.events.models.DateTime(
@@ -423,7 +383,6 @@ class PublicProfileActivity : AppCompatActivity() {
                     nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
                 )
             } else {
-                // Fall back to old format - convert to new format for consistency
                 val dateString = snapshot.child("date").getValue(String::class.java)
                 val timeString = snapshot.child("time").getValue(String::class.java)
 
@@ -446,15 +405,12 @@ class PublicProfileActivity : AppCompatActivity() {
 
     private fun setupViews() {
         try {
-            // Set header title
             binding.headerTitle.text = profileUserName ?: "Profile"
 
-            // Back button
             binding.backButton.setOnClickListener {
                 finish()
             }
 
-            // Contact organizer button
             binding.contactOrganizerButton.setOnClickListener {
                 Log.d(TAG, "📧 Contact organizer button clicked")
                 showContactModal()
@@ -474,8 +430,8 @@ class PublicProfileActivity : AppCompatActivity() {
                     Log.d(TAG, "🎉 Event clicked: ${event.title}")
                     showCustomEventDetails(event, fromInviteNotification = false)
                 },
-                onEditClick = { /* Not applicable for public profile */ },
-                onCancelClick = { /* Not applicable for public profile */ },
+                onEditClick = { },
+                onCancelClick = { },
                 onRsvpClick = { event ->
                     Log.d(TAG, "✅ RSVP clicked: ${event.title}")
                     handleRsvp(event)
@@ -493,10 +449,10 @@ class PublicProfileActivity : AppCompatActivity() {
                     Log.d(TAG, "📅 Past event clicked: ${event.title}")
                     showCustomEventDetails(event, fromInviteNotification = false)
                 },
-                onEditClick = { /* Not applicable for public profile */ },
-                onCancelClick = { /* Not applicable for public profile */ },
-                onRsvpClick = { /* Past events can't be RSVP'd */ },
-                onCancelRsvpClick = { /* Past events can't be cancelled */ }
+                onEditClick = { },
+                onCancelClick = { },
+                onRsvpClick = { },
+                onCancelRsvpClick = { }
             )
 
             binding.upcomingEventsRecyclerView.apply {
@@ -529,7 +485,6 @@ class PublicProfileActivity : AppCompatActivity() {
 
     private fun updateEventsList() {
         try {
-            // Update upcoming events with improved visibility handling
             if (upcomingEvents.isEmpty()) {
                 binding.upcomingEventsRecyclerView.visibility = View.GONE
                 binding.upcomingEmptyState.visibility = View.VISIBLE
@@ -539,7 +494,6 @@ class PublicProfileActivity : AppCompatActivity() {
                 upcomingEventsAdapter.updateEvents(upcomingEvents)
             }
 
-            // Update past events with improved visibility handling
             if (pastEvents.isEmpty()) {
                 binding.pastEventsRecyclerView.visibility = View.GONE
                 binding.pastEmptyState.visibility = View.VISIBLE
@@ -560,11 +514,6 @@ class PublicProfileActivity : AppCompatActivity() {
         Log.d(TAG, "📊 Updated total events count: $totalEvents")
     }
 
-    // ========================================
-    // UPDATED EVENT DETAILS POPUP - NO RSVP BUTTONS BY DEFAULT
-    // ========================================
-
-    // MODIFIED: Added fromInviteNotification parameter (always false for public profiles)
     private fun showCustomEventDetails(event: Event, fromInviteNotification: Boolean = false) {
         setMainContentInteraction(false)
         val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
@@ -575,7 +524,6 @@ class PublicProfileActivity : AppCompatActivity() {
         animateDetailsIn(detailsView)
     }
 
-    // MODIFIED: Updated to handle RSVP button visibility properly
     private fun populateDetailsView(view: View, event: Event, fromInviteNotification: Boolean = false) {
         view.findViewById<TextView>(R.id.eventTitle).text = event.title
         view.findViewById<ImageView>(R.id.closeButton).setOnClickListener {
@@ -596,30 +544,24 @@ class PublicProfileActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
         view.findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
 
-        // Handle organizer click - but since this IS the organizer's profile, disable it
         val organizerSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
-        // Disable the organizer click since user is already viewing this organizer's profile
         organizerSection.isClickable = false
         organizerSection.isFocusable = false
         organizerSection.background = null
 
-        // Hide the arrow since it's not clickable
         val organizerArrow = view.findViewById<ImageView>(R.id.organizerArrow)
         organizerArrow.visibility = View.GONE
 
-        // Update hint text
         val organizerHint = view.findViewById<TextView>(R.id.organizerHintText)
         organizerHint.text = "This profile's organizer"
         organizerHint.setTextColor(getColor(R.color.app_text_tertiary))
 
-        // MODIFIED: Handle RSVP buttons visibility and functionality
         val actionButtonsContainer = view.findViewById<LinearLayout>(R.id.actionButtonsContainer)
         val invitationContextText = view.findViewById<TextView>(R.id.invitationContextText)
         val actionButton = view.findViewById<androidx.appcompat.widget.AppCompatButton>(R.id.actionButton)
         val secondaryButton = view.findViewById<androidx.appcompat.widget.AppCompatButton>(R.id.secondaryButton)
 
         if (fromInviteNotification) {
-            // Show RSVP buttons only when accessed from invite notification
             Log.d(TAG, "🎉 Showing RSVP buttons - accessed from invite notification")
 
             actionButtonsContainer.visibility = View.VISIBLE
@@ -629,17 +571,14 @@ class PublicProfileActivity : AppCompatActivity() {
             val isAttending = event.attendees.containsKey(currentUserId)
 
             if (isMyEvent) {
-                // User is the organizer - hide invite context
                 invitationContextText.visibility = View.GONE
                 actionButton.text = "View Details"
                 actionButton.setOnClickListener {
-                    // Just close - they're the organizer
                     animateDetailsOut(view)
                 }
                 secondaryButton.visibility = View.GONE
 
             } else if (isAttending) {
-                // User is already attending
                 invitationContextText.text = "You're already attending this event"
                 invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_check_circle, 0, 0, 0)
 
@@ -651,11 +590,12 @@ class PublicProfileActivity : AppCompatActivity() {
                 secondaryButton.visibility = View.GONE
 
             } else {
-                // User can accept/decline invitation
                 invitationContextText.text = "You've been invited to this event"
                 invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_person_add, 0, 0, 0)
 
-                actionButton.text = "Accept Invitation"
+                // --- FIX STARTS HERE ---
+                actionButton.text = "Accept" // Changed from "Accept Invitation"
+                // --- FIX ENDS HERE ---
                 actionButton.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.app_primary_blue))
                 actionButton.setOnClickListener {
                     handleRsvpFromDetails(event, view)
@@ -664,19 +604,35 @@ class PublicProfileActivity : AppCompatActivity() {
                 secondaryButton.text = "Decline"
                 secondaryButton.visibility = View.VISIBLE
                 secondaryButton.setOnClickListener {
-                    // Just close for decline - user chose not to attend
                     animateDetailsOut(view)
                     Toast.makeText(this@PublicProfileActivity, "Invitation declined", Toast.LENGTH_SHORT).show()
                 }
+
+                // --- FIX STARTS HERE ---
+                // Make buttons symmetrical by applying equal weight
+                val commonLayoutParams = LinearLayout.LayoutParams(
+                    0, // Set width to 0 to allow weight to take over
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f // Assign equal weight to both buttons
+                )
+
+                // Add some margin between the buttons
+                val marginInPixels = (4 * resources.displayMetrics.density).toInt()
+                val acceptParams = LinearLayout.LayoutParams(commonLayoutParams)
+                acceptParams.marginEnd = marginInPixels
+                actionButton.layoutParams = acceptParams
+
+                val declineParams = LinearLayout.LayoutParams(commonLayoutParams)
+                declineParams.marginStart = marginInPixels
+                secondaryButton.layoutParams = declineParams
+                // --- FIX ENDS HERE ---
             }
         } else {
-            // Hide RSVP buttons when accessed normally (from event cards)
             Log.d(TAG, "ℹ️ Hiding RSVP buttons - accessed from event card (details only)")
             actionButtonsContainer.visibility = View.GONE
         }
     }
 
-    // NEW: Handle RSVP from event details dialog
     private fun handleRsvpFromDetails(event: Event, detailsView: View) {
         currentUserId?.let { uid ->
             Log.d(TAG, "✅ RSVP to event from details: ${event.title}")
@@ -696,12 +652,10 @@ class PublicProfileActivity : AppCompatActivity() {
                         Log.d(TAG, "✅ RSVP successful from details dialog")
                         Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_LONG).show()
 
-                        // Create notification for organizer
                         event.organizer?.uid?.let { organizerId ->
                             createNotification(organizerId, "rsvp", "$fullName RSVP'd to ${event.title}.")
                         }
 
-                        // Close the details dialog
                         animateDetailsOut(detailsView)
                     }
                     .addOnFailureListener { e ->
@@ -712,7 +666,6 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Handle Cancel RSVP from event details dialog
     private fun handleCancelRsvpFromDetails(event: Event, detailsView: View) {
         currentUserId?.let { uid ->
             Log.d(TAG, "❌ Cancel RSVP from details: ${event.title}")
@@ -727,7 +680,6 @@ class PublicProfileActivity : AppCompatActivity() {
                     Log.d(TAG, "✅ RSVP cancelled successfully from details dialog")
                     Toast.makeText(this, "RSVP cancelled for \"${event.title}\"", Toast.LENGTH_SHORT).show()
 
-                    // Close the details dialog
                     animateDetailsOut(detailsView)
                 }
                 .addOnFailureListener { e ->
@@ -822,10 +774,6 @@ class PublicProfileActivity : AppCompatActivity() {
         setViewAndChildrenEnabled(mainContent, enabled)
     }
 
-    // ========================================
-    // CONTACT ORGANIZER FUNCTIONALITY WITH EMAIL
-    // ========================================
-
     private fun showContactModal() {
         try {
             Log.d(TAG, "📧 Showing contact modal")
@@ -859,7 +807,6 @@ class PublicProfileActivity : AppCompatActivity() {
 
         Log.d(TAG, "🔧 Setting up contact modal listeners")
 
-        // Pre-populate current user's info if available
         currentUserId?.let { uid ->
             Log.d(TAG, "👤 Pre-populating user info for: $uid")
             database.reference.child("users").child(uid).get()
@@ -914,7 +861,6 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // ENHANCED: Contact message with email functionality
     private fun sendContactMessage(modalView: View, name: String, email: String, message: String) {
         try {
             Log.d(TAG, "📧 Starting contact message send process")
@@ -923,13 +869,10 @@ class PublicProfileActivity : AppCompatActivity() {
             Log.d(TAG, "   Recipient User ID: $profileUserId")
             Log.d(TAG, "   Message: ${message.take(100)}${if (message.length > 100) "..." else ""}")
 
-            // Show loading state
             showModalState(modalView, "loading")
 
-            // Send actual email using EmailService
             CoroutineScope(Dispatchers.Main).launch {
 
-                // Get recipient (profile owner) details
                 profileUserId?.let { recipientId ->
                     Log.d(TAG, "🔍 Getting recipient details for: $recipientId")
 
@@ -944,7 +887,6 @@ class PublicProfileActivity : AppCompatActivity() {
                                 Log.d(TAG, "   Email: ${if (recipientEmail != null) maskEmailForLogging(recipientEmail) else "NOT FOUND"}")
 
                                 if (recipientEmail != null) {
-                                    // Send email with event context if available
                                     val eventContext = "events organized by $recipientName"
 
                                     Log.d(TAG, "📧 Attempting to send email...")
@@ -963,46 +905,36 @@ class PublicProfileActivity : AppCompatActivity() {
                                         ) { success, errorMessage ->
 
                                             if (success) {
-                                                // Email sent successfully
                                                 Log.i(TAG, "✅ EMAIL SENT SUCCESSFULLY!")
                                                 Log.i(TAG, "   To: ${maskEmailForLogging(recipientEmail)}")
                                                 Log.i(TAG, "   From: $name")
 
-                                                // Show success state
                                                 showModalState(modalView, "success")
 
-                                                // Create notification with email reference
                                                 createEmailNotification(recipientId, name, email)
 
-                                                // Auto-close after 2 seconds
                                                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                                     animateModalOut(modalView)
                                                 }, 2000)
 
-                                                // Show success feedback to user
                                                 Toast.makeText(this@PublicProfileActivity,
                                                     "Message sent successfully! They'll receive it via email.",
                                                     Toast.LENGTH_LONG).show()
 
                                             } else {
-                                                // Email failed, but still create notification
                                                 Log.e(TAG, "❌ EMAIL SEND FAILED!")
                                                 Log.e(TAG, "   Error: $errorMessage")
                                                 Log.e(TAG, "   To: ${maskEmailForLogging(recipientEmail)}")
                                                 Log.e(TAG, "   From: $name")
 
-                                                // Show success anyway (notification was created)
                                                 showModalState(modalView, "success")
 
-                                                // Create fallback notification
                                                 createFallbackNotification(recipientId, name, message)
 
-                                                // Show warning toast
                                                 Toast.makeText(this@PublicProfileActivity,
                                                     "Message sent via notification (email delivery failed)",
                                                     Toast.LENGTH_LONG).show()
 
-                                                // Auto-close after 2 seconds
                                                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                                     animateModalOut(modalView)
                                                 }, 2000)
@@ -1011,7 +943,6 @@ class PublicProfileActivity : AppCompatActivity() {
                                     }
 
                                 } else {
-                                    // No recipient email found, fallback to notification only
                                     Log.w(TAG, "⚠️ No email found for recipient, using notification only")
 
                                     showModalState(modalView, "success")
@@ -1030,7 +961,6 @@ class PublicProfileActivity : AppCompatActivity() {
                             override fun onCancelled(error: DatabaseError) {
                                 Log.e(TAG, "❌ Failed to get recipient details: ${error.message}")
 
-                                // Show success anyway and create fallback notification
                                 showModalState(modalView, "success")
                                 createFallbackNotification(recipientId, name, message)
 
@@ -1053,7 +983,6 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // Create notification that mentions email
     private fun createEmailNotification(recipientId: String, senderName: String, senderEmail: String) {
         try {
             Log.d(TAG, "📱 Creating notification with email reference")
@@ -1066,10 +995,9 @@ class PublicProfileActivity : AppCompatActivity() {
                 "text" to "$senderName sent you a message about your events. Check your email (${maskEmailForLogging(senderEmail)}) for the full message.",
                 "timestamp" to com.google.firebase.database.ServerValue.TIMESTAMP,
                 "read" to false,
-                // Additional fields for better notification handling
                 "senderName" to senderName,
                 "senderEmail" to senderEmail,
-                "hasEmail" to true  // Flag to indicate email was sent
+                "hasEmail" to true
             )
 
             database.reference.child("notifications").child(recipientId).push().setValue(notification)
@@ -1085,7 +1013,6 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // Create fallback notification when email fails
     private fun createFallbackNotification(recipientId: String, senderName: String, message: String) {
         try {
             Log.d(TAG, "📱 Creating fallback notification (no email)")
@@ -1099,8 +1026,8 @@ class PublicProfileActivity : AppCompatActivity() {
                 "timestamp" to com.google.firebase.database.ServerValue.TIMESTAMP,
                 "read" to false,
                 "senderName" to senderName,
-                "hasEmail" to false,  // Flag to indicate no email was sent
-                "fullMessage" to message  // Store full message in notification
+                "hasEmail" to false,
+                "fullMessage" to message
             )
 
             database.reference.child("notifications").child(recipientId).push().setValue(notification)
@@ -1160,10 +1087,6 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // ========================================
-    // MODAL ANIMATIONS
-    // ========================================
-
     private fun animateModalIn(modalView: View) {
         binding.contactModalContainer.visibility = View.VISIBLE
 
@@ -1212,10 +1135,6 @@ class PublicProfileActivity : AppCompatActivity() {
         })
         finalAnimatorSet.start()
     }
-
-    // ========================================
-    // EVENT ACTIONS
-    // ========================================
 
     private fun handleRsvp(event: Event) {
         currentUserId?.let { uid ->
@@ -1290,11 +1209,9 @@ class PublicProfileActivity : AppCompatActivity() {
         return "Date and time not specified"
     }
 
-    // Proper cleanup like MainActivity
     override fun onDestroy() {
         Log.d(TAG, "🗑️ onDestroy called - cleaning up listeners")
 
-        // Clean up real-time listeners
         userDataListener?.let { listener ->
             userDataRef?.removeEventListener(listener)
             userDataListener = null
@@ -1312,7 +1229,6 @@ class PublicProfileActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // Stop refresh if activity is pausing
         if (isRefreshing) {
             binding.swipeRefreshLayout.isRefreshing = false
             isRefreshing = false

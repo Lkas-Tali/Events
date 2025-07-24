@@ -21,8 +21,11 @@ class NotificationsBottomSheet(
     private val context: Context,
     private val notifications: List<Notification>,
     private val onMarkAllAsRead: () -> Unit,
-    private val onShowEventDetails: (Event) -> Unit, // NEW: Callback to show event details in MainActivity
-    private val onNavigateToProfile: (String, String) -> Unit // NEW: Callback to navigate to public profile
+    // --- FIX STARTS HERE ---
+    // The callback now includes a Boolean to indicate if it's from an invitation.
+    private val onShowEventDetails: (Event, Boolean) -> Unit,
+    // --- FIX ENDS HERE ---
+    private val onNavigateToProfile: (String, String) -> Unit
 ) {
 
     private lateinit var dialog: BottomSheetDialog
@@ -41,8 +44,6 @@ class NotificationsBottomSheet(
             val timestampText: TextView = view.findViewById(R.id.timestampText)
             val unreadIndicator: View = view.findViewById(R.id.unreadIndicator)
             val actionButtonsLayout: LinearLayout = view.findViewById(R.id.actionButtonsLayout)
-
-            // NEW: Add email indicator (add this to your layout if needed)
             val emailIndicator: TextView? = view.findViewById(R.id.emailIndicator)
         }
 
@@ -57,14 +58,10 @@ class NotificationsBottomSheet(
 
             holder.notificationText.text = notification.text
             holder.timestampText.text = formatTimestamp(notification.timestamp)
-
-            // Set unread indicator
             holder.unreadIndicator.visibility = if (notification.read) View.GONE else View.VISIBLE
 
-            // NEW: Handle email indicator for contact and invitation notifications
             handleEmailIndicator(holder, notification)
 
-            // Set different icons and colors based on notification type
             when (notification.type) {
                 "invitation" -> {
                     holder.notificationIcon.setImageResource(R.drawable.ic_person_add)
@@ -92,10 +89,8 @@ class NotificationsBottomSheet(
                 }
             }
 
-            // Hide action buttons - we handle everything with clicks now
             holder.actionButtonsLayout.visibility = View.GONE
 
-            // Set read/unread styling
             if (notification.read) {
                 holder.itemView.alpha = 0.7f
                 holder.notificationText.setTextColor(ContextCompat.getColor(context, R.color.app_text_secondary))
@@ -104,7 +99,6 @@ class NotificationsBottomSheet(
                 holder.notificationText.setTextColor(ContextCompat.getColor(context, R.color.app_text_primary))
             }
 
-            // Add visual feedback for clickable notifications
             val isClickable = notification.type in listOf("invitation", "invitation_accepted", "invitation_declined", "rsvp", "contact")
             if (isClickable) {
                 holder.itemView.background = ContextCompat.getDrawable(context, R.drawable.tertiary_action_bg)
@@ -116,7 +110,6 @@ class NotificationsBottomSheet(
                 holder.itemView.isFocusable = false
             }
 
-            // Set click listener
             holder.itemView.setOnClickListener {
                 if (isClickable) {
                     onNotificationClick(notification)
@@ -124,21 +117,18 @@ class NotificationsBottomSheet(
             }
         }
 
-        // NEW: Handle email indicator display
         private fun handleEmailIndicator(holder: NotificationViewHolder, notification: Notification) {
             holder.emailIndicator?.let { indicator ->
-                // Check if notification has email information
                 val hasEmail = checkNotificationHasEmail(notification)
 
                 if (hasEmail && (notification.type == "contact" || notification.type == "invitation")) {
                     indicator.visibility = View.VISIBLE
-                    indicator.text = "📧 Email sent"
+                    indicator.text = "透 Email sent"
                     indicator.setTextColor(ContextCompat.getColor(context, R.color.app_success))
                     indicator.setBackgroundResource(R.drawable.tertiary_action_bg)
                 } else if (notification.type == "contact" || notification.type == "invitation") {
-                    // Show that email was not sent for these types
                     indicator.visibility = View.VISIBLE
-                    indicator.text = "📱 App only"
+                    indicator.text = "導 App only"
                     indicator.setTextColor(ContextCompat.getColor(context, R.color.app_text_secondary))
                     indicator.setBackgroundResource(R.drawable.filter_button_bg)
                 } else {
@@ -147,9 +137,7 @@ class NotificationsBottomSheet(
             }
         }
 
-        // NEW: Check if notification indicates email was sent
         private fun checkNotificationHasEmail(notification: Notification): Boolean {
-            // Check notification text for email indicators
             val text = notification.text.lowercase()
             return text.contains("check your email") ||
                     text.contains("email (") ||
@@ -200,29 +188,24 @@ class NotificationsBottomSheet(
         val recyclerView = view.findViewById<RecyclerView>(R.id.notificationsRecyclerView)
         val emptyStateLayout = view.findViewById<LinearLayout>(R.id.emptyStateLayout)
 
-        // Set title with count
         val unreadCount = notifications.count { !it.read }
         titleText.text = if (unreadCount > 0) {
-            "Notifications • $unreadCount"
+            "Notifications 窶｢ $unreadCount"
         } else {
             "Notifications"
         }
 
-        // Setup mark all as read button
         markAllReadButton.setOnClickListener {
             onMarkAllAsRead()
             dialog.dismiss()
         }
 
-        // Show/hide mark all read button
         markAllReadButton.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
 
-        // Setup close button
         view.findViewById<ImageView>(R.id.closeButton)?.setOnClickListener {
             dialog.dismiss()
         }
 
-        // Setup RecyclerView
         if (notifications.isEmpty()) {
             recyclerView.visibility = View.GONE
             emptyStateLayout.visibility = View.VISIBLE
@@ -238,31 +221,24 @@ class NotificationsBottomSheet(
         }
     }
 
-    // NEW: Enhanced notification click handler
     private fun handleNotificationClick(notification: Notification) {
-        // Mark notification as read first
         if (!notification.read) {
             markNotificationAsRead(notification)
         }
 
-        // Handle different notification types
         when (notification.type) {
             "invitation", "invitation_accepted", "invitation_declined", "rsvp" -> {
-                // These need event data
                 handleEventNotification(notification)
             }
             "contact" -> {
-                // Navigate to sender's public profile
                 handleContactNotification(notification)
             }
             else -> {
-                // Generic notification - just dismiss
                 dialog.dismiss()
             }
         }
     }
 
-    // NEW: Handle event-related notifications
     private fun handleEventNotification(notification: Notification) {
         val eventId = notification.eventId
         if (eventId.isNullOrEmpty()) {
@@ -271,20 +247,21 @@ class NotificationsBottomSheet(
             return
         }
 
-        // Show loading state
         showToast("Loading event details...")
 
-        // Fetch event data
         database.reference.child("events").child(eventId)
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     if (snapshot.exists()) {
                         try {
-                            // Parse event data (using the same logic as MainActivity)
                             val event = parseEventFromSnapshot(snapshot, eventId)
                             if (event != null) {
                                 dialog.dismiss()
-                                onShowEventDetails(event)
+                                // --- FIX STARTS HERE ---
+                                // We check if the notification type is 'invitation' and pass the result.
+                                val isInvitation = notification.type == "invitation"
+                                onShowEventDetails(event, isInvitation)
+                                // --- FIX ENDS HERE ---
                             } else {
                                 handleEventNotFound(notification)
                             }
@@ -303,14 +280,10 @@ class NotificationsBottomSheet(
             })
     }
 
-    // NEW: Handle contact notifications
     private fun handleContactNotification(notification: Notification) {
-        // Extract sender info from notification text
-        // Format: "[Name] sent you a message about your events."
         val senderName = extractSenderNameFromContactNotification(notification.text)
 
         if (senderName != null) {
-            // Find the sender's user ID by name (this is a limitation, but works for now)
             findUserByName(senderName) { userId ->
                 if (userId != null) {
                     dialog.dismiss()
@@ -326,10 +299,8 @@ class NotificationsBottomSheet(
         }
     }
 
-    // NEW: Extract sender name from contact notification text
     private fun extractSenderNameFromContactNotification(text: String): String? {
         return try {
-            // Expected format: "[Name] sent you a message about your events."
             val parts = text.split(" sent you a message")
             if (parts.isNotEmpty()) {
                 parts[0].trim()
@@ -339,7 +310,6 @@ class NotificationsBottomSheet(
         }
     }
 
-    // NEW: Find user by name (helper function)
     private fun findUserByName(name: String, callback: (String?) -> Unit) {
         database.reference.child("users")
             .orderByChild("fullName")
@@ -357,16 +327,12 @@ class NotificationsBottomSheet(
             })
     }
 
-    // NEW: Handle when event is not found (deleted)
     private fun handleEventNotFound(notification: Notification) {
         Toast.makeText(context, "This event is no longer available", Toast.LENGTH_SHORT).show()
-
-        // Delete the notification since the event doesn't exist
         deleteNotification(notification)
         dialog.dismiss()
     }
 
-    // NEW: Delete notification from database
     private fun deleteNotification(notification: Notification) {
         currentUserId?.let { uid ->
             database.reference
@@ -377,7 +343,6 @@ class NotificationsBottomSheet(
         }
     }
 
-    // NEW: Parse event from snapshot (same logic as MainActivity)
     private fun parseEventFromSnapshot(snapshot: DataSnapshot, eventId: String): Event? {
         return try {
             val title = snapshot.child("title").getValue(String::class.java) ?: ""
@@ -387,7 +352,6 @@ class NotificationsBottomSheet(
             val imageUrl = snapshot.child("imageUrl").getValue(String::class.java)
             val attendeesCount = snapshot.child("attendeesCount").getValue(Int::class.java) ?: 0
 
-            // Parse organizer
             val organizerSnapshot = snapshot.child("organizer")
             val organizer = if (organizerSnapshot.exists()) {
                 com.student.events.models.Organizer(
@@ -396,10 +360,8 @@ class NotificationsBottomSheet(
                 )
             } else null
 
-            // Parse dateTime
             val dateTime = parseDateTime(snapshot)
 
-            // Parse attendees
             val attendeesMap = mutableMapOf<String, com.student.events.models.Attendee>()
             val attendeesSnapshot = snapshot.child("attendees")
             for (attendeeSnapshot in attendeesSnapshot.children) {
@@ -428,7 +390,6 @@ class NotificationsBottomSheet(
         }
     }
 
-    // NEW: Parse dateTime (same logic as MainActivity)
     private fun parseDateTime(snapshot: DataSnapshot): com.student.events.models.DateTime? {
         return try {
             val dateTimeSnapshot = snapshot.child("dateTime")
@@ -438,7 +399,6 @@ class NotificationsBottomSheet(
                     nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
                 )
             } else {
-                // Fall back to old format
                 val dateString = snapshot.child("date").getValue(String::class.java)
                 val timeString = snapshot.child("time").getValue(String::class.java)
 

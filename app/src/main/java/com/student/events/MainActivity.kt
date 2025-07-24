@@ -56,7 +56,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var database: FirebaseDatabase
     private lateinit var eventsAdapter: EventsAdapter
 
-    // NEW: Session management with SharedPreferences
     private lateinit var sessionPrefs: SharedPreferences
     private lateinit var authStateListener: FirebaseAuth.AuthStateListener
 
@@ -74,15 +73,13 @@ class MainActivity : AppCompatActivity() {
 
     private var currentUserId: String? = null
     private var currentTab = "discover"
-    private var isAuthenticating = false // NEW: Prevent double authentication
+    private var isAuthenticating = false
 
-    // Filters
     private var searchQuery = ""
     private var locationFilter = ""
     private var startDateFilter: Date? = null
     private var endDateFilter: Date? = null
 
-    // REAL-TIME LISTENERS
     private var userDataListener: ValueEventListener? = null
     private var userDataRef: DatabaseReference? = null
     private var eventsListener: ValueEventListener? = null
@@ -105,53 +102,42 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Enable edge-to-edge display
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = true
         insetsController.isAppearanceLightNavigationBars = true
 
-        // NEW: Initialize session management
         sessionPrefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
 
-        // Initialize Firebase
         auth = FirebaseAuth.getInstance()
         database = FirebaseDatabase.getInstance()
 
         Log.d(TAG, "onCreate - Starting authentication check")
 
-        // NEW: Enhanced authentication check with multiple fallbacks
         if (!checkUserAuthentication()) {
-            return // Exit if user is not authenticated
+            return
         }
 
         applySystemBarInsets()
         setupViews()
         setupSwipeRefresh()
 
-        // Show initial loading state
         binding.loadingMoreLayout.visibility = View.VISIBLE
         binding.emptyStateText.visibility = View.GONE
 
-        // NEW: Setup auth state listener for real-time auth monitoring
         setupAuthStateListener()
-
-        // Start real-time listeners
         setupRealTimeListeners()
     }
 
-    // NEW: Enhanced authentication check with multiple fallbacks
     private fun checkUserAuthentication(): Boolean {
         val authStateManager = AuthStateManager.getInstance(this)
 
-        // Check if session is valid
         if (!authStateManager.validateSession()) {
             Log.d(TAG, "Invalid session - redirecting to login")
             navigateToLogin()
             return false
         }
 
-        // Get current user ID from auth state manager
         currentUserId = sessionPrefs.getString(KEY_USER_ID, null)
 
         if (currentUserId.isNullOrEmpty()) {
@@ -164,17 +150,14 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
-    // NEW: Attempt to restore authentication for edge cases
     private fun attemptAuthRestore(userId: String) {
         Log.d(TAG, "Attempting to restore authentication for user: $userId")
 
-        // Check if user data still exists in database
         database.reference.child("users").child(userId)
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     if (snapshot.exists()) {
                         Log.d(TAG, "✅ User data found in database - session is valid")
-                        // User exists in database, keep session valid
                         updateSessionData(userId)
                     } else {
                         Log.d(TAG, "❌ User data not found - clearing invalid session")
@@ -185,29 +168,24 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onCancelled(error: DatabaseError) {
                     Log.e(TAG, "Failed to verify user data: ${error.message}")
-                    // On error, keep existing session for user convenience
                 }
             })
     }
 
-    // NEW: Setup Firebase Auth State Listener for real-time monitoring
     private fun setupAuthStateListener() {
         authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             val user = firebaseAuth.currentUser
             Log.d(TAG, "Auth state changed - User: ${user?.uid}")
 
             if (user == null && !isAuthenticating) {
-                // User was signed out - check if it was intentional
                 val isSessionValid = sessionPrefs.getBoolean(KEY_USER_LOGGED_IN, false)
                 if (isSessionValid) {
                     Log.w(TAG, "⚠️ Firebase user null but session valid - possible device-specific issue")
-                    // Don't immediately logout, give Firebase a chance to restore
                     Handler(Looper.getMainLooper()).postDelayed({
                         if (auth.currentUser == null && sessionPrefs.getBoolean(KEY_USER_LOGGED_IN, false)) {
                             Log.w(TAG, "Firebase user still null after delay - keeping session")
-                            // Keep the session but monitor for database connectivity
                         }
-                    }, 3000) // Wait 3 seconds for Firebase to potentially restore
+                    }, 3000)
                 } else {
                     Log.d(TAG, "User signed out and session invalid - redirecting to login")
                     navigateToLogin()
@@ -222,7 +200,6 @@ class MainActivity : AppCompatActivity() {
         auth.addAuthStateListener(authStateListener)
     }
 
-    // NEW: Update session data when user is authenticated
     private fun updateSessionData(userId: String) {
         sessionPrefs.edit().apply {
             putBoolean(KEY_USER_LOGGED_IN, true)
@@ -233,13 +210,11 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "Session data updated for user: $userId")
     }
 
-    // NEW: Clear session data on logout
     private fun clearSessionData() {
         sessionPrefs.edit().clear().apply()
         Log.d(TAG, "Session data cleared")
     }
 
-    // NEW: Navigate to login with proper cleanup
     private fun navigateToLogin() {
         if (!isAuthenticating) {
             isAuthenticating = true
@@ -268,7 +243,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Setup all real-time listeners
     private fun setupRealTimeListeners() {
         Log.d(TAG, "Setting up real-time listeners")
         setupUserDataListener()
@@ -276,10 +250,8 @@ class MainActivity : AppCompatActivity() {
         setupNotificationsListener()
     }
 
-    // Real-time user data listener
     private fun setupUserDataListener() {
         currentUserId?.let { uid ->
-            // Remove any existing listener first
             userDataListener?.let { listener ->
                 userDataRef?.removeEventListener(listener)
             }
@@ -291,7 +263,6 @@ class MainActivity : AppCompatActivity() {
                     try {
                         if (!snapshot.exists()) {
                             Log.w(TAG, "User data not found - user may have been deleted")
-                            // User was deleted from database
                             clearSessionData()
                             navigateToLogin()
                             return
@@ -302,15 +273,12 @@ class MainActivity : AppCompatActivity() {
 
                         Log.d(TAG, "User data updated - Name: $fullName, Image: ${!profileImageUrl.isNullOrEmpty()}")
 
-                        // Extract first name only
                         val firstName = fullName?.split(" ")?.firstOrNull()
                             ?: auth.currentUser?.displayName?.split(" ")?.firstOrNull()
                             ?: "User"
 
-                        // Update header UI
                         binding.userNameText.text = firstName
 
-                        // Load avatar
                         loadAvatarImage(profileImageUrl)
 
                     } catch (e: Exception) {
@@ -325,7 +293,6 @@ class MainActivity : AppCompatActivity() {
                         clearSessionData()
                         navigateToLogin()
                     } else {
-                        // Fallback to auth user data
                         val fallbackName = auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
                         binding.userNameText.text = fallbackName
                         loadAvatarImage(null)
@@ -337,9 +304,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Real-time events listener - FIXED FOR PROPER LOADING
     private fun setupEventsListener() {
-        // Remove any existing listener first
         eventsListener?.let { listener ->
             eventsRef?.removeEventListener(listener)
         }
@@ -352,25 +317,21 @@ class MainActivity : AppCompatActivity() {
                 try {
                     Log.d(TAG, "Events data changed. Total events: ${snapshot.childrenCount}")
 
-                    // Clear lists
                     allEvents.clear()
                     myEvents.clear()
                     attendingEvents.clear()
 
-                    // Process each event
                     for (eventSnapshot in snapshot.children) {
                         try {
                             val eventId = eventSnapshot.key ?: continue
                             Log.d(TAG, "Processing event with ID: $eventId")
 
-                            // Manual parsing to handle different data structures
                             val event = parseEventFromSnapshot(eventSnapshot, eventId)
 
                             if (event != null) {
                                 allEvents.add(event)
                                 Log.d(TAG, "Successfully added event: ${event.title}")
 
-                                // Categorize events
                                 if (event.organizer?.uid == currentUserId) {
                                     myEvents.add(event)
                                     Log.d(TAG, "Added to myEvents: ${event.title}")
@@ -389,18 +350,14 @@ class MainActivity : AppCompatActivity() {
 
                     Log.d(TAG, "Final counts - All: ${allEvents.size}, My: ${myEvents.size}, Attending: ${attendingEvents.size}")
 
-                    // Sort events by date
                     sortEventsByDate(allEvents)
                     sortEventsByDate(myEvents)
                     sortEventsByDate(attendingEvents)
 
-                    // Mark data as loaded
                     isDataLoaded = true
 
-                    // Load events to display
                     resetAndLoadEvents()
 
-                    // Stop refresh indicator
                     binding.swipeRefreshLayout.isRefreshing = false
 
                 } catch (e: Exception) {
@@ -432,7 +389,6 @@ class MainActivity : AppCompatActivity() {
         eventsRef?.addValueEventListener(eventsListener!!)
     }
 
-    // Manual event parsing to handle different data structures
     private fun parseEventFromSnapshot(snapshot: DataSnapshot, eventId: String): Event? {
         return try {
             val title = snapshot.child("title").getValue(String::class.java) ?: ""
@@ -442,7 +398,6 @@ class MainActivity : AppCompatActivity() {
             val imageUrl = snapshot.child("imageUrl").getValue(String::class.java)
             val attendeesCount = snapshot.child("attendeesCount").getValue(Int::class.java) ?: 0
 
-            // Parse organizer
             val organizerSnapshot = snapshot.child("organizer")
             val organizer = if (organizerSnapshot.exists()) {
                 Organizer(
@@ -451,10 +406,8 @@ class MainActivity : AppCompatActivity() {
                 )
             } else null
 
-            // COMPATIBILITY: Parse dateTime (handle both old and new formats)
             val dateTime = parseDateTime(snapshot)
 
-            // Parse attendees
             val attendeesMap = mutableMapOf<String, Attendee>()
             val attendeesSnapshot = snapshot.child("attendees")
             for (attendeeSnapshot in attendeesSnapshot.children) {
@@ -486,7 +439,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun parseDateTime(snapshot: DataSnapshot): DateTime? {
         return try {
-            // Try new format first
             val dateTimeSnapshot = snapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
                 DateTime(
@@ -494,7 +446,6 @@ class MainActivity : AppCompatActivity() {
                     nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
                 )
             } else {
-                // Fall back to old format - convert to new format for consistency
                 val dateString = snapshot.child("date").getValue(String::class.java)
                 val timeString = snapshot.child("time").getValue(String::class.java)
 
@@ -515,10 +466,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Real-time notifications listener
     private fun setupNotificationsListener() {
         currentUserId?.let { uid ->
-            // Remove any existing listener first
             notificationsListener?.let { listener ->
                 notificationsQuery?.removeEventListener(listener)
             }
@@ -556,7 +505,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Enhanced avatar loading function
     private fun loadAvatarImage(profileImageUrl: String?) {
         if (!profileImageUrl.isNullOrEmpty()) {
             Log.d(TAG, "Loading avatar image from URL: $profileImageUrl")
@@ -673,7 +621,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Setup SwipeRefreshLayout
     private fun setupSwipeRefresh() {
         binding.swipeRefreshLayout.setColorSchemeResources(
             R.color.app_primary_blue,
@@ -686,14 +633,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Refresh all data
     private fun refreshAllData() {
         Log.d(TAG, "Refreshing all data...")
 
-        // Reset data state
         isDataLoaded = false
 
-        // Clear existing data
         allEvents.clear()
         myEvents.clear()
         attendingEvents.clear()
@@ -702,14 +646,9 @@ class MainActivity : AppCompatActivity() {
         currentDisplayedCount = 0
         hasMoreEvents = true
 
-        // Clear adapter
         eventsAdapter.notifyDataSetChanged()
 
-        // Re-setup listeners to fetch fresh data
         setupRealTimeListeners()
-
-        // The refresh indicator will be stopped when data is loaded
-        // in the onDataChange callbacks
     }
 
     private fun resetAndLoadEvents() {
@@ -828,28 +767,24 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
         view.findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
 
-        // Handle organizer click - navigate to public profile
         val organizerSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
         organizerSection.setOnClickListener {
             event.organizer?.let { organizer ->
                 Log.d(TAG, "📱 Navigating to organizer profile: ${organizer.fullName}")
-                animateDetailsOut(view) // Close current dialog first
+                animateDetailsOut(view)
 
-                // Small delay to ensure clean transition
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     startActivity(PublicProfileActivity.newIntent(this@MainActivity, organizer.uid, organizer.fullName))
                 }, 300)
             }
         }
 
-        // MODIFIED: Handle RSVP buttons visibility and functionality
         val actionButtonsContainer = view.findViewById<LinearLayout>(R.id.actionButtonsContainer)
         val invitationContextText = view.findViewById<TextView>(R.id.invitationContextText)
         val actionButton = view.findViewById<Button>(R.id.actionButton)
         val secondaryButton = view.findViewById<Button>(R.id.secondaryButton)
 
         if (fromInviteNotification) {
-            // Show RSVP buttons only when accessed from invite notification
             Log.d(TAG, "🎉 Showing RSVP buttons - accessed from invite notification")
 
             actionButtonsContainer.visibility = View.VISIBLE
@@ -859,17 +794,14 @@ class MainActivity : AppCompatActivity() {
             val isAttending = event.attendees.containsKey(currentUserId)
 
             if (isMyEvent) {
-                // User is the organizer - hide invite context
                 invitationContextText.visibility = View.GONE
                 actionButton.text = "View Details"
                 actionButton.setOnClickListener {
-                    // Just close - they're the organizer
                     animateDetailsOut(view)
                 }
                 secondaryButton.visibility = View.GONE
 
             } else if (isAttending) {
-                // User is already attending
                 invitationContextText.text = "You're already attending this event"
                 invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_check_circle, 0, 0, 0)
 
@@ -881,11 +813,12 @@ class MainActivity : AppCompatActivity() {
                 secondaryButton.visibility = View.GONE
 
             } else {
-                // User can accept/decline invitation
                 invitationContextText.text = "You've been invited to this event"
                 invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_person_add, 0, 0, 0)
 
-                actionButton.text = "Accept Invitation"
+                // --- FIX STARTS HERE ---
+                actionButton.text = "Accept" // Changed from "Accept Invitation"
+                // --- FIX ENDS HERE ---
                 actionButton.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.app_primary_blue))
                 actionButton.setOnClickListener {
                     handleRsvpFromDetails(event, view)
@@ -894,19 +827,35 @@ class MainActivity : AppCompatActivity() {
                 secondaryButton.text = "Decline"
                 secondaryButton.visibility = View.VISIBLE
                 secondaryButton.setOnClickListener {
-                    // Just close for decline - user chose not to attend
                     animateDetailsOut(view)
                     Toast.makeText(this@MainActivity, "Invitation declined", Toast.LENGTH_SHORT).show()
                 }
+
+                // --- FIX STARTS HERE ---
+                // Make buttons symmetrical by applying equal weight
+                val commonLayoutParams = LinearLayout.LayoutParams(
+                    0, // Set width to 0 to allow weight to take over
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f // Assign equal weight to both buttons
+                )
+
+                // Add some margin between the buttons
+                val marginInPixels = (4 * resources.displayMetrics.density).toInt()
+                val acceptParams = LinearLayout.LayoutParams(commonLayoutParams)
+                acceptParams.marginEnd = marginInPixels
+                actionButton.layoutParams = acceptParams
+
+                val declineParams = LinearLayout.LayoutParams(commonLayoutParams)
+                declineParams.marginStart = marginInPixels
+                secondaryButton.layoutParams = declineParams
+                // --- FIX ENDS HERE ---
             }
         } else {
-            // Hide RSVP buttons when accessed normally (from event cards)
             Log.d(TAG, "ℹ️ Hiding RSVP buttons - accessed from event card (details only)")
             actionButtonsContainer.visibility = View.GONE
         }
     }
 
-    // NEW: Handle RSVP from event details dialog
     private fun handleRsvpFromDetails(event: Event, detailsView: View) {
         currentUserId?.let { uid ->
             Log.d(TAG, "✅ RSVP to event from details: ${event.title}")
@@ -926,12 +875,10 @@ class MainActivity : AppCompatActivity() {
                         Log.d(TAG, "✅ RSVP successful from details dialog")
                         Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_LONG).show()
 
-                        // Create notification for organizer
                         event.organizer?.uid?.let { organizerId ->
                             createNotification(organizerId, "rsvp", "$fullName RSVP'd to ${event.title}.")
                         }
 
-                        // Close the details dialog
                         animateDetailsOut(detailsView)
                     }
                     .addOnFailureListener { e ->
@@ -942,7 +889,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Handle Cancel RSVP from event details dialog
     private fun handleCancelRsvpFromDetails(event: Event, detailsView: View) {
         currentUserId?.let { uid ->
             Log.d(TAG, "❌ Cancel RSVP from details: ${event.title}")
@@ -957,7 +903,6 @@ class MainActivity : AppCompatActivity() {
                     Log.d(TAG, "✅ RSVP cancelled successfully from details dialog")
                     Toast.makeText(this, "RSVP cancelled for \"${event.title}\"", Toast.LENGTH_SHORT).show()
 
-                    // Close the details dialog
                     animateDetailsOut(detailsView)
                 }
                 .addOnFailureListener { e ->
@@ -967,24 +912,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Accept invitation
     private fun acceptInvitation(event: Event, userId: String) {
-        // Get user data first
         database.reference.child("users").child(userId).get().addOnSuccessListener { snapshot ->
             val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
             val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
 
             val updates = hashMapOf<String, Any>(
-                // Update invitation status
                 "events/${event.id}/invitations/$userId/status" to "accepted",
                 "events/${event.id}/invitations/$userId/respondedAt" to ServerValue.TIMESTAMP,
 
-                // Add to attendees
                 "events/${event.id}/attendees/$userId/fullName" to fullName,
                 "events/${event.id}/attendees/$userId/profileImageUrl" to profileImageUrl,
                 "events/${event.id}/attendeesCount" to event.attendeesCount + 1,
 
-                // Update user's invitations
                 "users/$userId/invitations/${event.id}/status" to "accepted",
                 "users/$userId/invitations/${event.id}/respondedAt" to ServerValue.TIMESTAMP
             )
@@ -993,7 +933,6 @@ class MainActivity : AppCompatActivity() {
                 .addOnSuccessListener {
                     Toast.makeText(this, "Invitation accepted! You're now attending \"${event.title}\"", Toast.LENGTH_SHORT).show()
 
-                    // Notify organizer using existing notification structure
                     event.organizer?.uid?.let { organizerId ->
                         createInvitationNotification(
                             organizerId,
@@ -1020,24 +959,20 @@ class MainActivity : AppCompatActivity() {
             "read" to false
         )
 
-        // Add additional fields for invitation-related notifications
         eventId?.let { notification["eventId"] = it }
         eventTitle?.let { notification["eventTitle"] = it }
 
         database.reference.child("notifications").child(userId).push().setValue(notification)
     }
 
-    // NEW: Decline invitation
     private fun declineInvitation(event: Event, userId: String) {
         database.reference.child("users").child(userId).get().addOnSuccessListener { snapshot ->
             val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
 
             val updates = hashMapOf<String, Any>(
-                // Update invitation status
                 "events/${event.id}/invitations/$userId/status" to "declined",
                 "events/${event.id}/invitations/$userId/respondedAt" to ServerValue.TIMESTAMP,
 
-                // Update user's invitations
                 "users/$userId/invitations/${event.id}/status" to "declined",
                 "users/$userId/invitations/${event.id}/respondedAt" to ServerValue.TIMESTAMP
             )
@@ -1046,7 +981,6 @@ class MainActivity : AppCompatActivity() {
                 .addOnSuccessListener {
                     Toast.makeText(this, "Invitation declined", Toast.LENGTH_SHORT).show()
 
-                    // Notify organizer using existing notification structure
                     event.organizer?.uid?.let { organizerId ->
                         createInvitationNotification(
                             organizerId,
@@ -1178,15 +1112,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleRsvp(event: Event) {
         currentUserId?.let { uid ->
-            // Check if this is an invitation response
             database.reference.child("events").child(event.id).child("invitations").child(uid)
                 .addListenerForSingleValueEvent(object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
                         if (snapshot.exists()) {
-                            // This is responding to an invitation
                             acceptInvitation(event, uid)
                         } else {
-                            // FIXED: Regular RSVP (user found event and decided to attend)
                             database.reference.child("users").child(uid).get().addOnSuccessListener { userSnapshot ->
                                 val fullName = userSnapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
                                 val profileImageUrl = userSnapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
@@ -1201,12 +1132,11 @@ class MainActivity : AppCompatActivity() {
                                     .addOnSuccessListener {
                                         Toast.makeText(this@MainActivity, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
 
-                                        // FIXED: Notify organizer with correct message for direct RSVP
                                         event.organizer?.uid?.let { organizerId ->
                                             createInvitationNotification(
                                                 organizerId,
                                                 "rsvp",
-                                                "$fullName RSVP'd to ${event.title}.",  // CHANGED: "RSVP'd to" instead of "accepted your invite to"
+                                                "$fullName RSVP'd to ${event.title}.",
                                                 event.id,
                                                 event.title
                                             )
@@ -1318,13 +1248,10 @@ class MainActivity : AppCompatActivity() {
             onMarkAllAsRead = {
                 markAllNotificationsAsRead()
             },
-            onShowEventDetails = { event ->
-                // Use the existing custom event details system
-                // The existing checkAndUpdateInvitationStatus will handle showing correct buttons
-                showCustomEventDetails(event)
+            onShowEventDetails = { event, isInvitation ->
+                showCustomEventDetails(event, fromInviteNotification = isInvitation)
             },
             onNavigateToProfile = { userId, userName ->
-                // Navigate to PublicProfileActivity
                 val intent = PublicProfileActivity.newIntent(this, userId, userName)
                 startActivity(intent)
             }
@@ -1332,18 +1259,14 @@ class MainActivity : AppCompatActivity() {
         bottomSheet.show()
     }
 
-    // This ensures invitation notifications show the correct buttons
     private fun showEventDetailsFromNotification(event: Event, notificationType: String) {
         setMainContentInteraction(false)
         val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
 
-        // Use the existing populateDetailsView but with special handling for invitations
         populateDetailsView(detailsView, event)
 
-        // Special handling for invitation notifications
         if (notificationType == "invitation") {
             currentUserId?.let { uid ->
-                // Force check invitation status and show Accept/Decline buttons
                 forceInvitationButtonsForNotification(detailsView, event, uid)
             }
         }
@@ -1353,17 +1276,14 @@ class MainActivity : AppCompatActivity() {
         animateDetailsIn(detailsView)
     }
 
-    // NEW: Force invitation buttons when coming from notification
     private fun forceInvitationButtonsForNotification(view: View, event: Event, userId: String) {
         val actionButton = view.findViewById<Button>(R.id.actionButton)
         val secondaryButton = view.findViewById<Button>(R.id.secondaryButton)
 
-        // Show Accept/Decline buttons for invitation notifications
         actionButton.text = "Accept Invitation"
         actionButton.setBackgroundColor(resources.getColor(R.color.app_success, null))
         actionButton.setOnClickListener {
             acceptInvitation(event, userId)
-            // Close the details after accepting
             animateDetailsOut(view)
         }
         actionButton.visibility = View.VISIBLE
@@ -1372,7 +1292,6 @@ class MainActivity : AppCompatActivity() {
         secondaryButton.setBackgroundColor(resources.getColor(R.color.app_error, null))
         secondaryButton.setOnClickListener {
             declineInvitation(event, userId)
-            // Close the details after declining
             animateDetailsOut(view)
         }
         secondaryButton.visibility = View.VISIBLE
@@ -1396,7 +1315,6 @@ class MainActivity : AppCompatActivity() {
         createInvitationNotification(userId, type, text)
     }
 
-    // Enhanced logout with proper session cleanup
     private fun showLogoutConfirmation() {
         AlertDialog.Builder(this)
             .setTitle("Logout")
@@ -1408,32 +1326,25 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // NEW: Enhanced logout process
     private fun performLogout() {
         Log.d(TAG, "Performing logout...")
         isAuthenticating = true
 
-        // Clear session data first
         clearSessionData()
 
-        // Clean up listeners
         cleanupListeners()
 
-        // Sign out from Firebase
         auth.signOut()
 
-        // Navigate to login
         val intent = Intent(this, LoginActivity::class.java)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         startActivity(intent)
         finish()
     }
 
-    // Enhanced cleanup with auth state listener
     private fun cleanupListeners() {
         Log.d(TAG, "Cleaning up Firebase listeners")
 
-        // Remove auth state listener
         if (::authStateListener.isInitialized) {
             auth.removeAuthStateListener(authStateListener)
         }
@@ -1457,10 +1368,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Lifecycle management with session preservation
     override fun onPause() {
         super.onPause()
-        // Update last activity time
         currentUserId?.let { userId ->
             sessionPrefs.edit()
                 .putLong(KEY_LAST_LOGIN_TIME, System.currentTimeMillis())
