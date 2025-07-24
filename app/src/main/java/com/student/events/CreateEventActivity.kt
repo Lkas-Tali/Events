@@ -916,7 +916,7 @@ class CreateEventActivity : AppCompatActivity() {
                 date?.let { calendar.time = it }
             } catch (e: Exception) { /* Ignore */ }
         }
-        DatePickerDialog(
+        val datePickerDialog = DatePickerDialog(
             this,
             { _, year, month, dayOfMonth ->
                 calendar.set(year, month, dayOfMonth)
@@ -926,7 +926,11 @@ class CreateEventActivity : AppCompatActivity() {
             calendar.get(Calendar.YEAR),
             calendar.get(Calendar.MONTH),
             calendar.get(Calendar.DAY_OF_MONTH)
-        ).show()
+        )
+
+        // --- CHANGE: Prevent selecting past dates ---
+        datePickerDialog.datePicker.minDate = System.currentTimeMillis() - 1000
+        datePickerDialog.show()
     }
 
     private fun showTimePicker() {
@@ -1002,6 +1006,25 @@ class CreateEventActivity : AppCompatActivity() {
             }
         }
 
+        // --- CHANGE: Check if the selected date and time is in the past ---
+        try {
+            val format = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+            val selectedDateTime = format.parse("$selectedDate $selectedTime")
+
+            // A small grace period (e.g., 1 minute) can be useful.
+            val validationCalendar = Calendar.getInstance()
+            validationCalendar.add(Calendar.MINUTE, -1)
+
+            if (selectedDateTime != null && selectedDateTime.before(validationCalendar.time)) {
+                Toast.makeText(this, "Cannot create an event in the past.", Toast.LENGTH_LONG).show()
+                return false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Date/Time parsing error in validation", e)
+            Toast.makeText(this, "Invalid date or time format.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+
         binding.titleInputLayout.error = null
         binding.locationInputLayout.error = null
         binding.descriptionInputLayout.error = null
@@ -1012,7 +1035,7 @@ class CreateEventActivity : AppCompatActivity() {
         binding.createButton.isEnabled = !loading
         binding.cancelButton.isEnabled = !loading
         if (loading) {
-            binding.createButton.text = "Creating..."
+            binding.createButton.text = if (isEditMode) "Saving..." else "Creating..."
         } else {
             binding.createButton.text = if (isEditMode) "Save Changes" else "Create Event"
         }
