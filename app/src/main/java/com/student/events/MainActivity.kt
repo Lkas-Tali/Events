@@ -441,11 +441,19 @@ class MainActivity : AppCompatActivity() {
         return try {
             val dateTimeSnapshot = snapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
-                DateTime(
-                    seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L,
-                    nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
-                )
+                // COMPATIBILITY: Check for both "_seconds" (from app) and "seconds" (from web)
+                val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java)
+                    ?: dateTimeSnapshot.child("seconds").getValue(Long::class.java)
+                    ?: 0L
+
+                // COMPATIBILITY: Check for both "_nanoseconds" (from app) and "nanoseconds" (from web)
+                val nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java)
+                    ?: dateTimeSnapshot.child("nanoseconds").getValue(Long::class.java)
+                    ?: 0L
+
+                DateTime(seconds = seconds, nanoseconds = nanoseconds)
             } else {
+                // Fallback for older data structure without a 'dateTime' object
                 val dateString = snapshot.child("date").getValue(String::class.java)
                 val timeString = snapshot.child("time").getValue(String::class.java)
 

@@ -14,6 +14,7 @@ import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -23,7 +24,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.databinding.DataBindingUtil
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
@@ -36,7 +36,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import android.widget.LinearLayout
 
 class PublicProfileActivity : AppCompatActivity() {
 
@@ -378,11 +377,19 @@ class PublicProfileActivity : AppCompatActivity() {
         return try {
             val dateTimeSnapshot = snapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
-                com.student.events.models.DateTime(
-                    seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L,
-                    nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
-                )
+                // COMPATIBILITY: Check for both "_seconds" (from app) and "seconds" (from web)
+                val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java)
+                    ?: dateTimeSnapshot.child("seconds").getValue(Long::class.java)
+                    ?: 0L
+
+                // COMPATIBILITY: Check for both "_nanoseconds" (from app) and "nanoseconds" (from web)
+                val nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java)
+                    ?: dateTimeSnapshot.child("nanoseconds").getValue(Long::class.java)
+                    ?: 0L
+
+                com.student.events.models.DateTime(seconds = seconds, nanoseconds = nanoseconds)
             } else {
+                // Fallback for older data structure
                 val dateString = snapshot.child("date").getValue(String::class.java)
                 val timeString = snapshot.child("time").getValue(String::class.java)
 
@@ -593,9 +600,7 @@ class PublicProfileActivity : AppCompatActivity() {
                 invitationContextText.text = "You've been invited to this event"
                 invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_person_add, 0, 0, 0)
 
-                // --- FIX STARTS HERE ---
-                actionButton.text = "Accept" // Changed from "Accept Invitation"
-                // --- FIX ENDS HERE ---
+                actionButton.text = "Accept"
                 actionButton.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.app_primary_blue))
                 actionButton.setOnClickListener {
                     handleRsvpFromDetails(event, view)
@@ -608,15 +613,12 @@ class PublicProfileActivity : AppCompatActivity() {
                     Toast.makeText(this@PublicProfileActivity, "Invitation declined", Toast.LENGTH_SHORT).show()
                 }
 
-                // --- FIX STARTS HERE ---
-                // Make buttons symmetrical by applying equal weight
                 val commonLayoutParams = LinearLayout.LayoutParams(
-                    0, // Set width to 0 to allow weight to take over
+                    0,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
-                    1f // Assign equal weight to both buttons
+                    1f
                 )
 
-                // Add some margin between the buttons
                 val marginInPixels = (4 * resources.displayMetrics.density).toInt()
                 val acceptParams = LinearLayout.LayoutParams(commonLayoutParams)
                 acceptParams.marginEnd = marginInPixels
@@ -625,7 +627,6 @@ class PublicProfileActivity : AppCompatActivity() {
                 val declineParams = LinearLayout.LayoutParams(commonLayoutParams)
                 declineParams.marginStart = marginInPixels
                 secondaryButton.layoutParams = declineParams
-                // --- FIX ENDS HERE ---
             }
         } else {
             Log.d(TAG, "ℹ️ Hiding RSVP buttons - accessed from event card (details only)")
@@ -644,7 +645,7 @@ class PublicProfileActivity : AppCompatActivity() {
                 val updates = hashMapOf<String, Any>(
                     "events/${event.id}/attendees/$uid/fullName" to fullName,
                     "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
-                    "events/${event.id}/attendeesCount" to event.attendeesCount + 1
+                    "events/${event.id}/attendeesCount" to ServerValue.increment(1)
                 )
 
                 database.reference.updateChildren(updates)
@@ -655,7 +656,7 @@ class PublicProfileActivity : AppCompatActivity() {
                         event.organizer?.uid?.let { organizerId ->
                             createNotification(organizerId, "rsvp", "$fullName RSVP'd to ${event.title}.")
                         }
-
+                        setupRealTimeListeners()
                         animateDetailsOut(detailsView)
                     }
                     .addOnFailureListener { e ->
@@ -672,14 +673,14 @@ class PublicProfileActivity : AppCompatActivity() {
 
             val updates = hashMapOf<String, Any?>(
                 "events/${event.id}/attendees/$uid" to null,
-                "events/${event.id}/attendeesCount" to (event.attendeesCount - 1).coerceAtLeast(0)
+                "events/${event.id}/attendeesCount" to ServerValue.increment(-1)
             )
 
             database.reference.updateChildren(updates)
                 .addOnSuccessListener {
                     Log.d(TAG, "✅ RSVP cancelled successfully from details dialog")
                     Toast.makeText(this, "RSVP cancelled for \"${event.title}\"", Toast.LENGTH_SHORT).show()
-
+                    setupRealTimeListeners()
                     animateDetailsOut(detailsView)
                 }
                 .addOnFailureListener { e ->
@@ -739,10 +740,10 @@ class PublicProfileActivity : AppCompatActivity() {
         scrimFadeOut.duration = 300
 
         val cardFadeOut = ObjectAnimator.ofFloat(detailsView, "alpha", 0f)
-        val cardSlideDown = ObjectAnimator.ofFloat(detailsView, "translationY", 100f)
+        val cardSlideDownAnimator = ObjectAnimator.ofFloat(detailsView, "translationY", 100f)
 
         val cardAnimatorSet = AnimatorSet()
-        cardAnimatorSet.playTogether(cardFadeOut, cardSlideDown)
+        cardAnimatorSet.playTogether(cardFadeOut, cardSlideDownAnimator)
         cardAnimatorSet.interpolator = DecelerateInterpolator()
         cardAnimatorSet.duration = 300
 
@@ -1147,7 +1148,7 @@ class PublicProfileActivity : AppCompatActivity() {
                 val updates = hashMapOf<String, Any>(
                     "events/${event.id}/attendees/$uid/fullName" to fullName,
                     "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
-                    "events/${event.id}/attendeesCount" to event.attendeesCount + 1
+                    "events/${event.id}/attendeesCount" to ServerValue.increment(1)
                 )
 
                 database.reference.updateChildren(updates)
@@ -1157,32 +1158,53 @@ class PublicProfileActivity : AppCompatActivity() {
                         event.organizer?.uid?.let { organizerId ->
                             createNotification(organizerId, "rsvp", "$fullName RSVP'd to ${event.title}.")
                         }
+                        setupRealTimeListeners() // Force refresh
                     }
                     .addOnFailureListener { e ->
                         Log.e(TAG, "❌ RSVP failed: ${e.message}")
                         Toast.makeText(this, "Failed to RSVP", Toast.LENGTH_SHORT).show()
                     }
+            }.addOnFailureListener {
+                Log.e(TAG, "❌ Failed to get user data for RSVP: ${it.message}")
+                Toast.makeText(this, "Could not retrieve your user data to RSVP.", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     private fun handleCancelRsvp(event: Event) {
         currentUserId?.let { uid ->
-            Log.d(TAG, "❌ Cancel RSVP for event: ${event.title}")
+            database.reference.child("events").child(event.id).child("attendees").child(uid)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        if (snapshot.exists()) {
+                            Log.d(TAG, "❌ Cancel RSVP for event: ${event.title}")
 
-            val updates = hashMapOf<String, Any?>(
-                "events/${event.id}/attendees/$uid" to null,
-                "events/${event.id}/attendeesCount" to (event.attendeesCount - 1).coerceAtLeast(0)
-            )
-            database.reference.updateChildren(updates)
-                .addOnSuccessListener {
-                    Log.d(TAG, "✅ RSVP cancelled successfully")
-                    Toast.makeText(this, "RSVP cancelled", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "❌ Cancel RSVP failed: ${e.message}")
-                    Toast.makeText(this, "Failed to cancel RSVP", Toast.LENGTH_SHORT).show()
-                }
+                            val updates = hashMapOf<String, Any?>(
+                                "events/${event.id}/attendees/$uid" to null,
+                                "events/${event.id}/attendeesCount" to ServerValue.increment(-1)
+                            )
+                            database.reference.updateChildren(updates)
+                                .addOnSuccessListener {
+                                    Log.d(TAG, "✅ RSVP cancelled successfully")
+                                    Toast.makeText(this@PublicProfileActivity, "RSVP cancelled", Toast.LENGTH_SHORT).show()
+                                    setupRealTimeListeners() // Force refresh
+                                }
+                                .addOnFailureListener { e ->
+                                    Log.e(TAG, "❌ Cancel RSVP failed: ${e.message}")
+                                    Toast.makeText(this@PublicProfileActivity, "Failed to cancel RSVP", Toast.LENGTH_SHORT).show()
+                                }
+                        } else {
+                            Log.w(TAG, "⚠️ Cancel RSVP called but user is not an attendee. Refreshing UI.")
+                            Toast.makeText(this@PublicProfileActivity, "You are not attending this event.", Toast.LENGTH_SHORT).show()
+                            setupRealTimeListeners()
+                        }
+                    }
+
+                    override fun onCancelled(error: DatabaseError) {
+                        Log.e(TAG, "❌ DB error checking attendee status: ${error.message}")
+                        Toast.makeText(this@PublicProfileActivity, "Error checking RSVP status.", Toast.LENGTH_SHORT).show()
+                    }
+                })
         }
     }
 

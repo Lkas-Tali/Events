@@ -464,13 +464,19 @@ class ProfileActivity : AppCompatActivity() {
     // ADDED: EXACT same datetime parsing from PublicProfileActivity
     private fun parseDateTime(snapshot: DataSnapshot): com.student.events.models.DateTime? {
         return try {
-            // Try new format first
             val dateTimeSnapshot = snapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
-                com.student.events.models.DateTime(
-                    seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L,
-                    nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
-                )
+                // COMPATIBILITY: Check for both "_seconds" (from app) and "seconds" (from web)
+                val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java)
+                    ?: dateTimeSnapshot.child("seconds").getValue(Long::class.java)
+                    ?: 0L
+
+                // COMPATIBILITY: Check for both "_nanoseconds" (from app) and "nanoseconds" (from web)
+                val nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java)
+                    ?: dateTimeSnapshot.child("nanoseconds").getValue(Long::class.java)
+                    ?: 0L
+
+                com.student.events.models.DateTime(seconds = seconds, nanoseconds = nanoseconds)
             } else {
                 // Fall back to old format - convert to new format for consistency
                 val dateString = snapshot.child("date").getValue(String::class.java)

@@ -192,6 +192,8 @@ class LoginActivity : AppCompatActivity() {
 
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener(this) { task ->
+                progressBar.visibility = View.GONE
+                loginButton.isEnabled = true
                 if (task.isSuccessful) {
                     val user = auth.currentUser
                     if (user != null) {
@@ -203,7 +205,7 @@ class LoginActivity : AppCompatActivity() {
                         navigateToMain()
                     }
                 }
-                 else {
+                else {
                     val errorMessage = task.exception?.message ?: "Unknown error"
                     Log.e(TAG, "Login failed: $errorMessage")
                     Toast.makeText(baseContext, "Authentication failed: $errorMessage", Toast.LENGTH_LONG).show()

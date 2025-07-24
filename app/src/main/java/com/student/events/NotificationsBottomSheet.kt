@@ -394,9 +394,15 @@ class NotificationsBottomSheet(
         return try {
             val dateTimeSnapshot = snapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
+                val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java)
+                    ?: dateTimeSnapshot.child("seconds").getValue(Long::class.java)
+                    ?: 0L
+                val nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java)
+                    ?: dateTimeSnapshot.child("nanoseconds").getValue(Long::class.java)
+                    ?: 0L
                 com.student.events.models.DateTime(
-                    seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L,
-                    nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
+                    seconds = seconds,
+                    nanoseconds = nanoseconds
                 )
             } else {
                 val dateString = snapshot.child("date").getValue(String::class.java)

@@ -857,10 +857,11 @@ class CreateEventActivity : AppCompatActivity() {
 
     private fun formatEventDateForEmail(eventSnapshot: DataSnapshot): String {
         return try {
-            // Try new format first
             val dateTimeSnapshot = eventSnapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
-                val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L
+                val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java)
+                    ?: dateTimeSnapshot.child("seconds").getValue(Long::class.java)
+                    ?: 0L
                 if (seconds > 0) {
                     val date = Date(seconds * 1000)
                     val displayFormat = SimpleDateFormat("EEEE, d MMMM yyyy 'at' HH:mm", Locale.UK)
@@ -1037,10 +1038,11 @@ class CreateEventActivity : AppCompatActivity() {
 
     private fun loadExistingDateTime(snapshot: DataSnapshot) {
         try {
-            // Try new format first
             val dateTimeSnapshot = snapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
-                val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L
+                val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java)
+                    ?: dateTimeSnapshot.child("seconds").getValue(Long::class.java)
+                    ?: 0L
                 if (seconds > 0) {
                     val date = Date(seconds * 1000)
                     selectedDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(date)
