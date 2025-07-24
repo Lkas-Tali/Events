@@ -123,12 +123,12 @@ class NotificationsBottomSheet(
 
                 if (hasEmail && (notification.type == "contact" || notification.type == "invitation")) {
                     indicator.visibility = View.VISIBLE
-                    indicator.text = "透 Email sent"
+                    indicator.text = "📧 Email sent"
                     indicator.setTextColor(ContextCompat.getColor(context, R.color.app_success))
                     indicator.setBackgroundResource(R.drawable.tertiary_action_bg)
                 } else if (notification.type == "contact" || notification.type == "invitation") {
                     indicator.visibility = View.VISIBLE
-                    indicator.text = "導 App only"
+                    indicator.text = "📱 App only"
                     indicator.setTextColor(ContextCompat.getColor(context, R.color.app_text_secondary))
                     indicator.setBackgroundResource(R.drawable.filter_button_bg)
                 } else {
@@ -190,7 +190,7 @@ class NotificationsBottomSheet(
 
         val unreadCount = notifications.count { !it.read }
         titleText.text = if (unreadCount > 0) {
-            "Notifications 窶｢ $unreadCount"
+            "Notifications - $unreadCount"
         } else {
             "Notifications"
         }
