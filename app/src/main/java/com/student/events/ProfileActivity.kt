@@ -10,6 +10,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
+import android.text.InputType
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -456,6 +457,9 @@ class ProfileActivity : AppCompatActivity() {
         fullNameEditText.setText(binding.profileNameText.text.toString())
         aboutEditText.setText(binding.profileAboutText.text.toString())
 
+        fullNameEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+        aboutEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+
         if (selectedImageUri != null) {
             Glide.with(this).load(selectedImageUri).circleCrop().into(profileImagePreview)
         } else {
@@ -572,6 +576,11 @@ class ProfileActivity : AppCompatActivity() {
         val cancelButton = dialogView.findViewById<androidx.appcompat.widget.AppCompatButton>(R.id.cancelButton)
         val closeButton = dialogView.findViewById<ImageView>(R.id.closeButton)
         val progressBar = dialogView.findViewById<View>(R.id.progressBar)
+
+        currentPasswordEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        newPasswordEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        confirmPasswordEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+
 
         changePasswordButton.setOnClickListener {
             val currentPassword = currentPasswordEditText.text.toString()

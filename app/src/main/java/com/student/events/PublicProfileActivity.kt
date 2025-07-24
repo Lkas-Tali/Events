@@ -7,6 +7,7 @@ import android.animation.ObjectAnimator
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -792,6 +793,10 @@ class PublicProfileActivity : AppCompatActivity() {
         val nameInput = modalView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.nameInput)
         val emailInput = modalView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.emailInput)
         val messageInput = modalView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.messageInput)
+
+        nameInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+        emailInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        messageInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
 
         Log.d(TAG, "🔧 Setting up contact modal listeners")
 

@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.text.InputType
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
@@ -366,6 +367,7 @@ class CreateEventActivity : AppCompatActivity() {
                 validateAndAddEmail(email)
             }
         }
+        binding.emailInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
     }
 
     // NEW: Show keyboard helper

@@ -3,6 +3,7 @@ package com.student.events
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.util.Patterns
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -77,6 +78,8 @@ class ForgotPasswordActivity : AppCompatActivity() {
         // View groups
         formGroup = findViewById(R.id.formGroup)
         successGroup = findViewById(R.id.successGroup)
+
+        emailEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
     }
 
     private fun setupClickListeners() {
