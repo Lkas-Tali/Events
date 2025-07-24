@@ -151,7 +151,7 @@
                     android:layout_weight="1"
                     android:layout_marginStart="8dp"
                     android:background="@drawable/primary_action_bg"
-                    android:text="Send Message"
+                    android:text="Send"
                     android:textAllCaps="false"
                     android:textColor="@android:color/white"
                     android:textSize="16sp"
