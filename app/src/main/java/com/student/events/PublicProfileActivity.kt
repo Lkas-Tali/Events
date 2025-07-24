@@ -17,6 +17,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -40,10 +41,8 @@ import java.util.*
 class PublicProfileActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityPublicProfileBinding
-    // --- FIX STARTS HERE: Use two separate adapters ---
     private lateinit var upcomingEventsAdapter: EventsAdapter
     private lateinit var pastEventsAdapter: EventsAdapter
-    // --- FIX ENDS HERE ---
     private lateinit var auth: FirebaseAuth
     private lateinit var database: FirebaseDatabase
     private lateinit var emailService: EmailService
@@ -316,13 +315,11 @@ class PublicProfileActivity : AppCompatActivity() {
             if (!isRefreshing) {
                 Log.d(TAG, "🔄 Pull-to-refresh triggered")
                 isRefreshing = true
-
-                setupRealTimeListeners()
-
+                // The real-time listeners will handle the update. This is for UX.
                 binding.swipeRefreshLayout.postDelayed({
                     binding.swipeRefreshLayout.isRefreshing = false
                     isRefreshing = false
-                }, 3000)
+                }, 1000)
             }
         }
     }
@@ -429,8 +426,6 @@ class PublicProfileActivity : AppCompatActivity() {
 
     private fun setupRecyclerViews() {
         try {
-            // --- FIX: Apply the EXACT same RecyclerView configuration as MainActivity ---
-
             upcomingEventsAdapter = EventsAdapter(
                 events = emptyList(),
                 currentUserId = currentUserId ?: "",
@@ -446,7 +441,8 @@ class PublicProfileActivity : AppCompatActivity() {
                 },
                 onCancelRsvpClick = { event ->
                     Log.d(TAG, "❌ Cancel RSVP clicked: ${event.title}")
-                    handleCancelRsvp(event)
+                    // --- FIX: Show dialog before cancelling ---
+                    showCancelRsvpDialog(event)
                 }
             )
 
@@ -463,24 +459,19 @@ class PublicProfileActivity : AppCompatActivity() {
                 onCancelRsvpClick = { }
             )
 
-            // --- CRITICAL FIX: Apply MainActivity's exact RecyclerView configuration ---
             binding.upcomingEventsRecyclerView.apply {
                 layoutManager = LinearLayoutManager(this@PublicProfileActivity)
                 adapter = upcomingEventsAdapter
-                // KEY FIXES from MainActivity:
                 isNestedScrollingEnabled = false
                 setHasFixedSize(false)
-                // Enable hardware acceleration for alpha rendering
                 setLayerType(View.LAYER_TYPE_HARDWARE, null)
             }
 
             binding.pastEventsRecyclerView.apply {
                 layoutManager = LinearLayoutManager(this@PublicProfileActivity)
                 adapter = pastEventsAdapter
-                // KEY FIXES from MainActivity:
                 isNestedScrollingEnabled = false
                 setHasFixedSize(false)
-                // Enable hardware acceleration for alpha rendering
                 setLayerType(View.LAYER_TYPE_HARDWARE, null)
             }
 
@@ -502,20 +493,18 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    // --- FIX STARTS HERE: Update the correct adapter instance ---
     private fun updateEventsList() {
         try {
-            upcomingEventsAdapter.updateEvents(upcomingEvents)
+            upcomingEventsAdapter.updateEvents(upcomingEvents.toList())
             binding.upcomingEmptyState.visibility = if (upcomingEvents.isEmpty()) View.VISIBLE else View.GONE
 
-            pastEventsAdapter.updateEvents(pastEvents)
+            pastEventsAdapter.updateEvents(pastEvents.toList())
             binding.pastEmptyState.visibility = if (pastEvents.isEmpty()) View.VISIBLE else View.GONE
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error updating events list: ${e.message}", e)
         }
     }
-    // --- FIX ENDS HERE ---
 
     private fun updateTotalEventsCount() {
         val totalEvents = upcomingEvents.size + pastEvents.size
@@ -658,7 +647,6 @@ class PublicProfileActivity : AppCompatActivity() {
                         event.organizer?.uid?.let { organizerId ->
                             createNotification(organizerId, "rsvp", "$fullName RSVP'd to ${event.title}.")
                         }
-                        setupRealTimeListeners()
                         animateDetailsOut(detailsView)
                     }
                     .addOnFailureListener { e ->
@@ -682,7 +670,6 @@ class PublicProfileActivity : AppCompatActivity() {
                 .addOnSuccessListener {
                     Log.d(TAG, "✅ RSVP cancelled successfully from details dialog")
                     Toast.makeText(this, "RSVP cancelled for \"${event.title}\"", Toast.LENGTH_SHORT).show()
-                    setupRealTimeListeners()
                     animateDetailsOut(detailsView)
                 }
                 .addOnFailureListener { e ->
@@ -714,7 +701,6 @@ class PublicProfileActivity : AppCompatActivity() {
         val contentContainer = detailsView.findViewById<ViewGroup>(R.id.contentContainer)
         val contentAnimators = AnimatorSet()
         val animators = mutableListOf<Animator>()
-
         for (i in 0 until contentContainer.childCount) {
             val child = contentContainer.getChildAt(i)
             child.alpha = 0f
@@ -731,7 +717,6 @@ class PublicProfileActivity : AppCompatActivity() {
             animators.add(childSet)
         }
         contentAnimators.playTogether(animators)
-
         val finalAnimatorSet = AnimatorSet()
         finalAnimatorSet.play(scrimFadeIn).with(cardAnimatorSet).before(contentAnimators)
         finalAnimatorSet.start()
@@ -1160,7 +1145,6 @@ class PublicProfileActivity : AppCompatActivity() {
                         event.organizer?.uid?.let { organizerId ->
                             createNotification(organizerId, "rsvp", "$fullName RSVP'd to ${event.title}.")
                         }
-                        setupRealTimeListeners() // Force refresh
                     }
                     .addOnFailureListener { e ->
                         Log.e(TAG, "❌ RSVP failed: ${e.message}")
@@ -1173,42 +1157,37 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleCancelRsvp(event: Event) {
+    // --- FIX: Renamed from handleCancelRsvp to cancelRsvp and simplified ---
+    private fun cancelRsvp(event: Event) {
         currentUserId?.let { uid ->
-            database.reference.child("events").child(event.id).child("attendees").child(uid)
-                .addListenerForSingleValueEvent(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        if (snapshot.exists()) {
-                            Log.d(TAG, "❌ Cancel RSVP for event: ${event.title}")
+            Log.d(TAG, "❌ Cancel RSVP for event: ${event.title}")
 
-                            val updates = hashMapOf<String, Any?>(
-                                "events/${event.id}/attendees/$uid" to null,
-                                "events/${event.id}/attendeesCount" to ServerValue.increment(-1)
-                            )
-                            database.reference.updateChildren(updates)
-                                .addOnSuccessListener {
-                                    Log.d(TAG, "✅ RSVP cancelled successfully")
-                                    Toast.makeText(this@PublicProfileActivity, "RSVP cancelled", Toast.LENGTH_SHORT).show()
-                                    setupRealTimeListeners() // Force refresh
-                                }
-                                .addOnFailureListener { e ->
-                                    Log.e(TAG, "❌ Cancel RSVP failed: ${e.message}")
-                                    Toast.makeText(this@PublicProfileActivity, "Failed to cancel RSVP", Toast.LENGTH_SHORT).show()
-                                }
-                        } else {
-                            Log.w(TAG, "⚠️ Cancel RSVP called but user is not an attendee. Refreshing UI.")
-                            Toast.makeText(this@PublicProfileActivity, "You are not attending this event.", Toast.LENGTH_SHORT).show()
-                            setupRealTimeListeners()
-                        }
-                    }
-
-                    override fun onCancelled(error: DatabaseError) {
-                        Log.e(TAG, "❌ DB error checking attendee status: ${error.message}")
-                        Toast.makeText(this@PublicProfileActivity, "Error checking RSVP status.", Toast.LENGTH_SHORT).show()
-                    }
-                })
+            val updates = hashMapOf<String, Any?>(
+                "events/${event.id}/attendees/$uid" to null,
+                "events/${event.id}/attendeesCount" to ServerValue.increment(-1)
+            )
+            database.reference.updateChildren(updates)
+                .addOnSuccessListener {
+                    Log.d(TAG, "✅ RSVP cancelled successfully")
+                    Toast.makeText(this@PublicProfileActivity, "RSVP cancelled", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "❌ Cancel RSVP failed: ${e.message}")
+                    Toast.makeText(this@PublicProfileActivity, "Failed to cancel RSVP", Toast.LENGTH_SHORT).show()
+                }
         }
     }
+
+    // --- FIX: Add dialog for cancelling RSVP ---
+    private fun showCancelRsvpDialog(event: Event) {
+        AlertDialog.Builder(this)
+            .setTitle("Cancel RSVP")
+            .setMessage("Are you sure you want to cancel your RSVP for \"${event.title}\"?")
+            .setPositiveButton("Yes, Cancel RSVP") { _, _ -> cancelRsvp(event) }
+            .setNegativeButton("No", null)
+            .show()
+    }
+
 
     private fun createNotification(userId: String, type: String, text: String) {
         try {
@@ -1238,14 +1217,10 @@ class PublicProfileActivity : AppCompatActivity() {
 
         userDataListener?.let { listener ->
             userDataRef?.removeEventListener(listener)
-            userDataListener = null
-            userDataRef = null
         }
 
         eventsListener?.let { listener ->
             eventsRef?.removeEventListener(listener)
-            eventsListener = null
-            eventsRef = null
         }
 
         super.onDestroy()

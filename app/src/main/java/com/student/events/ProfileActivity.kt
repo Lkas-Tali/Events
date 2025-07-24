@@ -46,7 +46,6 @@ import java.util.*
 class ProfileActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityProfileBinding
-    // --- FIX: Use two separate, dedicated adapters to prevent view recycling issues ---
     private lateinit var upcomingEventsAdapter: EventsAdapter
     private lateinit var pastEventsAdapter: EventsAdapter
     private lateinit var auth: FirebaseAuth
@@ -60,6 +59,11 @@ class ProfileActivity : AppCompatActivity() {
     private var currentUser: FirebaseUser? = null
 
     private var selectedImageUri: Uri? = null
+
+    private var userProfileListener: ValueEventListener? = null
+    private var userProfileRef: DatabaseReference? = null
+    private var userEventsListener: ValueEventListener? = null
+    private var userEventsRef: DatabaseReference? = null
 
     companion object {
         private const val TAG = "ProfileActivity"
@@ -110,8 +114,7 @@ class ProfileActivity : AppCompatActivity() {
             setupViews()
             setupRecyclerViews()
             setupSwipeRefresh()
-            loadUserProfile()
-            loadUserEvents()
+            setupRealTimeListeners()
 
         } catch (e: Exception) {
             Log.e(TAG, "Error in onCreate: ${e.message}", e)
@@ -142,16 +145,11 @@ class ProfileActivity : AppCompatActivity() {
         )
 
         binding.swipeRefreshLayout.setOnRefreshListener {
-            refreshAllData()
+            binding.swipeRefreshLayout.isRefreshing = true
+            binding.swipeRefreshLayout.postDelayed({
+                binding.swipeRefreshLayout.isRefreshing = false
+            }, 1000)
         }
-    }
-
-    private fun refreshAllData() {
-        Log.d(TAG, "Refreshing profile data...")
-        upcomingEvents.clear()
-        pastEvents.clear()
-        loadUserProfile()
-        loadUserEvents()
     }
 
     private fun setupViews() {
@@ -173,11 +171,8 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    // --- FIX: This function now correctly initializes two separate adapter instances ---
     private fun setupRecyclerViews() {
         try {
-            // --- FIX: Apply the EXACT same RecyclerView configuration as MainActivity ---
-
             upcomingEventsAdapter = EventsAdapter(
                 events = emptyList(),
                 currentUserId = currentUserId ?: "",
@@ -215,24 +210,19 @@ class ProfileActivity : AppCompatActivity() {
                 onCancelRsvpClick = { /* No cancel RSVP for past events */ }
             )
 
-            // --- CRITICAL FIX: Apply MainActivity's exact RecyclerView configuration ---
             binding.upcomingEventsRecyclerView.apply {
                 layoutManager = LinearLayoutManager(this@ProfileActivity)
                 adapter = upcomingEventsAdapter
-                // KEY FIXES from MainActivity:
                 isNestedScrollingEnabled = false
                 setHasFixedSize(false)
-                // Enable hardware acceleration for alpha rendering
                 setLayerType(View.LAYER_TYPE_HARDWARE, null)
             }
 
             binding.pastEventsRecyclerView.apply {
                 layoutManager = LinearLayoutManager(this@ProfileActivity)
                 adapter = pastEventsAdapter
-                // KEY FIXES from MainActivity:
                 isNestedScrollingEnabled = false
                 setHasFixedSize(false)
-                // Enable hardware acceleration for alpha rendering
                 setLayerType(View.LAYER_TYPE_HARDWARE, null)
             }
 
@@ -241,46 +231,49 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupRealTimeListeners() {
+        loadUserProfile()
+        loadUserEvents()
+    }
+
     private fun loadUserProfile() {
         try {
             currentUserId?.let { uid ->
-                database.reference.child("users").child(uid)
-                    .addListenerForSingleValueEvent(object : ValueEventListener {
-                        override fun onDataChange(snapshot: DataSnapshot) {
-                            try {
-                                val fullName = snapshot.child("fullName").getValue(String::class.java)
-                                val email = snapshot.child("email").getValue(String::class.java)
-                                val about = snapshot.child("about").getValue(String::class.java)
-                                val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java)
+                userProfileListener?.let { userProfileRef?.removeEventListener(it) }
+                userProfileRef = database.reference.child("users").child(uid)
+                userProfileListener = object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        try {
+                            val fullName = snapshot.child("fullName").getValue(String::class.java)
+                            val email = snapshot.child("email").getValue(String::class.java)
+                            val about = snapshot.child("about").getValue(String::class.java)
+                            val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java)
 
-                                binding.apply {
-                                    profileNameText.text = fullName ?: "User"
-                                    profileEmailText.text = email ?: ""
-                                    profileAboutText.text = about ?: "Welcome to my profile!"
-                                }
-                                loadProfileImage(profileImageUrl)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error processing user profile data: ${e.message}", e)
-                            } finally {
-                                binding.swipeRefreshLayout.isRefreshing = false
-                            }
-                        }
-
-                        override fun onCancelled(error: DatabaseError) {
-                            Log.e(TAG, "Failed to load user profile: ${error.message}")
                             binding.apply {
-                                profileNameText.text = currentUser?.displayName ?: "User"
-                                profileEmailText.text = currentUser?.email ?: ""
-                                profileAboutText.text = "Welcome to my profile!"
-                                profileImageView.setImageResource(R.drawable.ic_person)
+                                profileNameText.text = fullName ?: "User"
+                                profileEmailText.text = email ?: ""
+                                profileAboutText.text = about ?: "Welcome to my profile!"
                             }
-                            binding.swipeRefreshLayout.isRefreshing = false
+                            loadProfileImage(profileImageUrl)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error processing user profile data: ${e.message}", e)
                         }
-                    })
+                    }
+
+                    override fun onCancelled(error: DatabaseError) {
+                        Log.e(TAG, "Failed to load user profile: ${error.message}")
+                        binding.apply {
+                            profileNameText.text = currentUser?.displayName ?: "User"
+                            profileEmailText.text = currentUser?.email ?: ""
+                            profileAboutText.text = "Welcome to my profile!"
+                            profileImageView.setImageResource(R.drawable.ic_person)
+                        }
+                    }
+                }
+                userProfileRef?.addValueEventListener(userProfileListener!!)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading user profile: ${e.message}", e)
-            binding.swipeRefreshLayout.isRefreshing = false
         }
     }
 
@@ -300,48 +293,50 @@ class ProfileActivity : AppCompatActivity() {
     private fun loadUserEvents() {
         try {
             currentUserId?.let { uid ->
-                database.reference.child("events")
-                    .addListenerForSingleValueEvent(object : ValueEventListener {
-                        override fun onDataChange(eventsSnapshot: DataSnapshot) {
-                            try {
-                                upcomingEvents.clear()
-                                pastEvents.clear()
-                                val currentTime = System.currentTimeMillis() / 1000
+                userEventsListener?.let { userEventsRef?.removeEventListener(it) }
+                userEventsRef = database.reference.child("events")
+                userEventsListener = object : ValueEventListener {
+                    override fun onDataChange(eventsSnapshot: DataSnapshot) {
+                        try {
+                            upcomingEvents.clear()
+                            pastEvents.clear()
+                            val currentTime = System.currentTimeMillis() / 1000
 
-                                for (eventSnapshot in eventsSnapshot.children) {
-                                    try {
-                                        val event = parseEventFromSnapshot(eventSnapshot, eventSnapshot.key ?: continue)
-                                        if (event != null) {
-                                            val isOrganizer = event.organizer?.uid == uid
-                                            val isAttendee = event.attendees.containsKey(uid)
-                                            if (isOrganizer || isAttendee) {
-                                                if ((event.dateTime?.seconds ?: Long.MAX_VALUE) > currentTime) {
-                                                    upcomingEvents.add(event)
-                                                } else {
-                                                    pastEvents.add(event)
-                                                }
+                            for (eventSnapshot in eventsSnapshot.children) {
+                                try {
+                                    val event = parseEventFromSnapshot(eventSnapshot, eventSnapshot.key ?: continue)
+                                    if (event != null) {
+                                        val isOrganizer = event.organizer?.uid == uid
+                                        val isAttendee = event.attendees.containsKey(uid)
+                                        if (isOrganizer || isAttendee) {
+                                            if ((event.dateTime?.seconds ?: Long.MAX_VALUE) > currentTime) {
+                                                upcomingEvents.add(event)
+                                            } else {
+                                                pastEvents.add(event)
                                             }
                                         }
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Error parsing event ${eventSnapshot.key}: ${e.message}", e)
                                     }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error parsing event ${eventSnapshot.key}: ${e.message}", e)
                                 }
-                                upcomingEvents.sortBy { it.dateTime?.seconds ?: 0 }
-                                pastEvents.sortByDescending { it.dateTime?.seconds ?: 0 }
-                                updateEventsList()
-                                updateTotalEventsCount()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error processing events data: ${e.message}", e)
-                            } finally {
-                                binding.swipeRefreshLayout.isRefreshing = false
                             }
-                        }
-
-                        override fun onCancelled(error: DatabaseError) {
-                            Log.e(TAG, "Failed to load events: ${error.code} - ${error.message}")
+                            upcomingEvents.sortBy { it.dateTime?.seconds ?: 0 }
+                            pastEvents.sortByDescending { it.dateTime?.seconds ?: 0 }
+                            updateEventsList()
+                            updateTotalEventsCount()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error processing events data: ${e.message}", e)
+                        } finally {
                             binding.swipeRefreshLayout.isRefreshing = false
                         }
-                    })
+                    }
+
+                    override fun onCancelled(error: DatabaseError) {
+                        Log.e(TAG, "Failed to load events: ${error.code} - ${error.message}")
+                        binding.swipeRefreshLayout.isRefreshing = false
+                    }
+                }
+                userEventsRef?.addValueEventListener(userEventsListener!!)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading user events: ${e.message}", e)
@@ -428,13 +423,12 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    // --- FIX: This function now correctly updates the two separate adapter instances ---
     private fun updateEventsList() {
         try {
-            upcomingEventsAdapter.updateEvents(upcomingEvents)
+            upcomingEventsAdapter.updateEvents(upcomingEvents.toList())
             binding.upcomingEmptyState.visibility = if (upcomingEvents.isEmpty()) View.VISIBLE else View.GONE
 
-            pastEventsAdapter.updateEvents(pastEvents)
+            pastEventsAdapter.updateEvents(pastEvents.toList())
             binding.pastEmptyState.visibility = if (pastEvents.isEmpty()) View.VISIBLE else View.GONE
 
         } catch (e: Exception) {
@@ -500,7 +494,6 @@ class ProfileActivity : AppCompatActivity() {
                     dialog.dismiss()
                     selectedImageUri = null
                     Toast.makeText(this, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
-                    loadUserProfile()
                 } else {
                     Toast.makeText(this, "Failed to update profile", Toast.LENGTH_SHORT).show()
                 }
@@ -640,21 +633,22 @@ class ProfileActivity : AppCompatActivity() {
 
     private fun handleRsvp(event: Event) {
         currentUserId?.let { uid ->
-            val currentUser = auth.currentUser
-            val userName = currentUser?.displayName ?: "A User"
-            val updates = hashMapOf<String, Any>(
-                "events/${event.id}/attendees/$uid/fullName" to userName,
-                "events/${event.id}/attendees/$uid/profileImageUrl" to (currentUser?.photoUrl?.toString() ?: ""),
-                "events/${event.id}/attendeesCount" to event.attendeesCount + 1
-            )
-            database.reference.updateChildren(updates)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
-                    loadUserEvents()
-                }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Failed to RSVP", Toast.LENGTH_SHORT).show()
-                }
+            database.reference.child("users").child(uid).get().addOnSuccessListener { userSnapshot ->
+                val fullName = userSnapshot.child("fullName").getValue(String::class.java) ?: "A User"
+                val profileImageUrl = userSnapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+                val updates = hashMapOf<String, Any>(
+                    "events/${event.id}/attendees/$uid/fullName" to fullName,
+                    "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
+                    "events/${event.id}/attendeesCount" to ServerValue.increment(1)
+                )
+                database.reference.updateChildren(updates)
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
+                    }
+                    .addOnFailureListener {
+                        Toast.makeText(this, "Failed to RSVP", Toast.LENGTH_SHORT).show()
+                    }
+            }
         }
     }
 
@@ -680,7 +674,6 @@ class ProfileActivity : AppCompatActivity() {
         database.reference.child("events").child(event.id).removeValue()
             .addOnSuccessListener {
                 Toast.makeText(this, "Event deleted successfully", Toast.LENGTH_SHORT).show()
-                loadUserEvents()
             }
             .addOnFailureListener {
                 Toast.makeText(this, "Failed to delete event", Toast.LENGTH_SHORT).show()
@@ -691,12 +684,11 @@ class ProfileActivity : AppCompatActivity() {
         currentUserId?.let { uid ->
             val updates = hashMapOf<String, Any?>(
                 "events/${event.id}/attendees/$uid" to null,
-                "events/${event.id}/attendeesCount" to (event.attendeesCount - 1).coerceAtLeast(0)
+                "events/${event.id}/attendeesCount" to ServerValue.increment(-1)
             )
             database.reference.updateChildren(updates)
                 .addOnSuccessListener {
                     Toast.makeText(this, "RSVP cancelled", Toast.LENGTH_SHORT).show()
-                    loadUserEvents()
                 }
                 .addOnFailureListener {
                     Toast.makeText(this, "Failed to cancel RSVP", Toast.LENGTH_SHORT).show()
@@ -741,6 +733,7 @@ class ProfileActivity : AppCompatActivity() {
                 Log.d(TAG, "Opening profile for organizer: $organizerName ($organizerUid)")
                 animateDetailsOut(view)
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    // --- FIX: Correctly call PublicProfileActivity.newIntent ---
                     val intent = PublicProfileActivity.newIntent(this@ProfileActivity, organizerUid, organizerName)
                     startActivity(intent)
                 }, 300)
@@ -842,5 +835,11 @@ class ProfileActivity : AppCompatActivity() {
             return displayFormat.format(date)
         }
         return "Date and time not specified"
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        userProfileRef?.removeEventListener(userProfileListener!!)
+        userEventsRef?.removeEventListener(userEventsListener!!)
     }
 }
