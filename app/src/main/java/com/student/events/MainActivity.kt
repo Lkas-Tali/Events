@@ -709,7 +709,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun sortEventsByDate(events: MutableList<Event>) {
-        events.sortBy { it.dateTime?.seconds ?: Long.MAX_VALUE }
+        val currentTime = System.currentTimeMillis() / 1000
+        events.sortWith(compareBy<Event> { (it.dateTime?.seconds ?: Long.MAX_VALUE) < currentTime }
+            .thenBy { it.dateTime?.seconds ?: Long.MAX_VALUE })
     }
 
     private fun updateEmptyState(isEmpty: Boolean) {
