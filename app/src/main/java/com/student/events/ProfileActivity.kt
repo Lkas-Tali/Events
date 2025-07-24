@@ -23,7 +23,6 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -54,7 +53,7 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var database: FirebaseDatabase
     private lateinit var storage: FirebaseStorage
 
-    // Event lists
+    // UPDATED: Separate collections for upcoming and past events
     private val upcomingEvents = mutableListOf<Event>()
     private val pastEvents = mutableListOf<Event>()
 
@@ -194,9 +193,9 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    // UPDATED: Setup separate RecyclerViews like PublicProfileActivity
     private fun setupRecyclerViews() {
         try {
-            // Upcoming events adapter
             upcomingEventsAdapter = EventsAdapter(
                 events = emptyList(),
                 currentUserId = currentUserId ?: "",
@@ -237,7 +236,6 @@ class ProfileActivity : AppCompatActivity() {
                 }
             )
 
-            // Past events adapter
             pastEventsAdapter = EventsAdapter(
                 events = emptyList(),
                 currentUserId = currentUserId ?: "",
@@ -245,13 +243,12 @@ class ProfileActivity : AppCompatActivity() {
                     Log.d(TAG, "Past event clicked: ${event.title}")
                     showCustomEventDetails(event)
                 },
-                onEditClick = { /* Edit not available for past events */ },
-                onCancelClick = { /* Cancel not available for past events */ },
-                onRsvpClick = { /* RSVP not available for past events */ },
-                onCancelRsvpClick = { /* Cancel RSVP not available for past events */ }
+                onEditClick = { /* Past events cannot be edited */ },
+                onCancelClick = { /* Past events cannot be cancelled */ },
+                onRsvpClick = { /* Past events cannot be RSVP'd */ },
+                onCancelRsvpClick = { /* Past events cannot be cancelled */ }
             )
 
-            // Set up RecyclerViews
             binding.upcomingEventsRecyclerView.apply {
                 layoutManager = LinearLayoutManager(this@ProfileActivity)
                 adapter = upcomingEventsAdapter
@@ -333,6 +330,7 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    // UPDATED: Load events using EXACT same logic as PublicProfileActivity
     private fun loadUserEvents() {
         try {
             currentUserId?.let { uid ->
@@ -340,45 +338,57 @@ class ProfileActivity : AppCompatActivity() {
                     .addListenerForSingleValueEvent(object : ValueEventListener {
                         override fun onDataChange(eventsSnapshot: DataSnapshot) {
                             try {
+                                Log.d(TAG, "📅 Events data changed. Total events: ${eventsSnapshot.childrenCount}")
+
                                 upcomingEvents.clear()
                                 pastEvents.clear()
 
                                 val currentTime = System.currentTimeMillis() / 1000 // Current time in seconds
 
+                                // Process each event using EXACT same logic as PublicProfileActivity
                                 for (eventSnapshot in eventsSnapshot.children) {
-                                    val event = eventSnapshot.getValue(Event::class.java)
-                                    event?.let {
-                                        it.id = eventSnapshot.key ?: ""
+                                    try {
+                                        val eventId = eventSnapshot.key ?: continue
+                                        Log.v(TAG, "   Processing event: $eventId")
 
-                                        // Include events where user is organizer OR attendee
-                                        val isOrganizer = it.organizer?.uid == uid
-                                        val isAttendee = it.attendees.containsKey(uid)
+                                        // Manual parsing to handle different data structures (EXACTLY like PublicProfileActivity)
+                                        val event = parseEventFromSnapshot(eventSnapshot, eventId)
 
-                                        if (isOrganizer || isAttendee) {
-                                            // Filter by time: upcoming vs past
-                                            val eventTime = it.dateTime?.seconds ?: Long.MAX_VALUE
-                                            if (eventTime > currentTime) {
-                                                upcomingEvents.add(it)
-                                                Log.d(TAG, "Added to upcoming: ${it.title}")
-                                            } else {
-                                                pastEvents.add(it)
-                                                Log.d(TAG, "Added to past: ${it.title}")
+                                        if (event != null) {
+                                            // Include events where user is organizer OR attendee
+                                            val isOrganizer = event.organizer?.uid == uid
+                                            val isAttendee = event.attendees.containsKey(uid)
+
+                                            if (isOrganizer || isAttendee) {
+                                                // Check if event is upcoming or past
+                                                val eventTime = event.dateTime?.seconds ?: Long.MAX_VALUE
+                                                if (eventTime > currentTime) {
+                                                    upcomingEvents.add(event)
+                                                    Log.v(TAG, "     → Added to upcoming: ${event.title}")
+                                                } else {
+                                                    pastEvents.add(event)
+                                                    Log.v(TAG, "     → Added to past: ${event.title}")
+                                                }
                                             }
+                                        } else {
+                                            Log.w(TAG, "❌ Failed to parse event: $eventId")
                                         }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "❌ Error parsing event ${eventSnapshot.key}: ${e.message}", e)
                                     }
                                 }
+
+                                Log.d(TAG, "📊 Final counts - Upcoming: ${upcomingEvents.size}, Past: ${pastEvents.size}")
 
                                 // Sort events by date
                                 upcomingEvents.sortBy { it.dateTime?.seconds ?: 0 }
                                 pastEvents.sortByDescending { it.dateTime?.seconds ?: 0 } // Recent first for past events
 
-                                Log.d(TAG, "Final counts - Upcoming: ${upcomingEvents.size}, Past: ${pastEvents.size}")
-
                                 updateEventsList()
                                 updateTotalEventsCount()
 
                             } catch (e: Exception) {
-                                Log.e(TAG, "Error processing events data: ${e.message}", e)
+                                Log.e(TAG, "❌ Error processing events data: ${e.message}", e)
                             } finally {
                                 // Stop refresh indicator
                                 binding.swipeRefreshLayout.isRefreshing = false
@@ -386,7 +396,7 @@ class ProfileActivity : AppCompatActivity() {
                         }
 
                         override fun onCancelled(error: DatabaseError) {
-                            Log.e(TAG, "Failed to load events: ${error.message}")
+                            Log.e(TAG, "❌ Failed to load events: ${error.code} - ${error.message}")
                             // Stop refresh indicator
                             binding.swipeRefreshLayout.isRefreshing = false
                         }
@@ -394,14 +404,99 @@ class ProfileActivity : AppCompatActivity() {
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading user events: ${e.message}", e)
+            Log.e(TAG, "❌ Error loading user events: ${e.message}", e)
             binding.swipeRefreshLayout.isRefreshing = false
         }
     }
 
+    // ADDED: EXACT same manual parsing from PublicProfileActivity
+    private fun parseEventFromSnapshot(snapshot: DataSnapshot, eventId: String): Event? {
+        return try {
+            val title = snapshot.child("title").getValue(String::class.java) ?: ""
+            val location = snapshot.child("location").getValue(String::class.java) ?: ""
+            val description = snapshot.child("description").getValue(String::class.java) ?: ""
+            val status = snapshot.child("status").getValue(String::class.java) ?: "upcoming"
+            val imageUrl = snapshot.child("imageUrl").getValue(String::class.java)
+            val attendeesCount = snapshot.child("attendeesCount").getValue(Int::class.java) ?: 0
+
+            // Parse organizer
+            val organizerSnapshot = snapshot.child("organizer")
+            val organizer = if (organizerSnapshot.exists()) {
+                com.student.events.models.Organizer(
+                    uid = organizerSnapshot.child("uid").getValue(String::class.java) ?: "",
+                    fullName = organizerSnapshot.child("fullName").getValue(String::class.java) ?: ""
+                )
+            } else null
+
+            // Parse dateTime (handle both old and new formats)
+            val dateTime = parseDateTime(snapshot)
+
+            // Parse attendees
+            val attendeesMap = mutableMapOf<String, com.student.events.models.Attendee>()
+            val attendeesSnapshot = snapshot.child("attendees")
+            for (attendeeSnapshot in attendeesSnapshot.children) {
+                val attendeeId = attendeeSnapshot.key ?: continue
+                val attendee = com.student.events.models.Attendee(
+                    fullName = attendeeSnapshot.child("fullName").getValue(String::class.java) ?: "",
+                    profileImageUrl = attendeeSnapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+                )
+                attendeesMap[attendeeId] = attendee
+            }
+
+            Event(
+                id = eventId,
+                title = title,
+                location = location,
+                description = description,
+                organizer = organizer,
+                attendees = attendeesMap,
+                attendeesCount = attendeesCount,
+                status = status,
+                dateTime = dateTime,
+                imageUrl = imageUrl
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error manually parsing event: ${e.message}", e)
+            null
+        }
+    }
+
+    // ADDED: EXACT same datetime parsing from PublicProfileActivity
+    private fun parseDateTime(snapshot: DataSnapshot): com.student.events.models.DateTime? {
+        return try {
+            // Try new format first
+            val dateTimeSnapshot = snapshot.child("dateTime")
+            if (dateTimeSnapshot.exists()) {
+                com.student.events.models.DateTime(
+                    seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java) ?: 0L,
+                    nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java) ?: 0L
+                )
+            } else {
+                // Fall back to old format - convert to new format for consistency
+                val dateString = snapshot.child("date").getValue(String::class.java)
+                val timeString = snapshot.child("time").getValue(String::class.java)
+
+                if (!dateString.isNullOrEmpty() && !timeString.isNullOrEmpty()) {
+                    val format = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+                    val date = format.parse("$dateString $timeString")
+                    if (date != null) {
+                        com.student.events.models.DateTime(
+                            seconds = date.time / 1000,
+                            nanoseconds = 0L
+                        )
+                    } else null
+                } else null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error parsing dateTime: ${e.message}", e)
+            null
+        }
+    }
+
+    // NEW: Update events list like PublicProfileActivity
     private fun updateEventsList() {
         try {
-            // Update upcoming events
+            // Update upcoming events with improved visibility handling
             if (upcomingEvents.isEmpty()) {
                 binding.upcomingEventsRecyclerView.visibility = View.GONE
                 binding.upcomingEmptyState.visibility = View.VISIBLE
@@ -411,7 +506,7 @@ class ProfileActivity : AppCompatActivity() {
                 upcomingEventsAdapter.updateEvents(upcomingEvents)
             }
 
-            // Update past events
+            // Update past events with improved visibility handling
             if (pastEvents.isEmpty()) {
                 binding.pastEventsRecyclerView.visibility = View.GONE
                 binding.pastEmptyState.visibility = View.VISIBLE
@@ -426,6 +521,7 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    // NEW: Update total events count like PublicProfileActivity
     private fun updateTotalEventsCount() {
         val totalEvents = upcomingEvents.size + pastEvents.size
         binding.totalEventsText.text = "$totalEvents Total Events"
@@ -684,25 +780,21 @@ class ProfileActivity : AppCompatActivity() {
 
     private fun handleRsvp(event: Event) {
         currentUserId?.let { uid ->
-            database.reference.child("users").child(uid).get().addOnSuccessListener { snapshot ->
-                val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
-                val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
-
-                val updates = hashMapOf<String, Any>(
-                    "events/${event.id}/attendees/$uid/fullName" to fullName,
-                    "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
-                    "events/${event.id}/attendeesCount" to event.attendeesCount + 1
-                )
-
-                database.reference.updateChildren(updates)
-                    .addOnSuccessListener {
-                        Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
-                        loadUserEvents() // Refresh events
-                    }
-                    .addOnFailureListener {
-                        Toast.makeText(this, "Failed to RSVP", Toast.LENGTH_SHORT).show()
-                    }
-            }
+            val currentUser = auth.currentUser
+            val userName = currentUser?.displayName ?: "A User"
+            val updates = hashMapOf<String, Any>(
+                "events/${event.id}/attendees/$uid/fullName" to userName,
+                "events/${event.id}/attendees/$uid/profileImageUrl" to (currentUser?.photoUrl?.toString() ?: ""),
+                "events/${event.id}/attendeesCount" to event.attendeesCount + 1
+            )
+            database.reference.updateChildren(updates)
+                .addOnSuccessListener {
+                    Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
+                    loadUserEvents() // Refresh events
+                }
+                .addOnFailureListener {
+                    Toast.makeText(this, "Failed to RSVP", Toast.LENGTH_SHORT).show()
+                }
         }
     }
 
@@ -832,10 +924,6 @@ class ProfileActivity : AppCompatActivity() {
             organizerHintText.visibility = View.GONE
             organizerArrow.visibility = View.GONE
         }
-
-        // Hide RSVP buttons in event details for profile view
-        val actionButtonsContainer = view.findViewById<LinearLayout>(R.id.actionButtonsContainer)
-        actionButtonsContainer.visibility = View.GONE
     }
 
     private fun animateDetailsIn(detailsView: View) {

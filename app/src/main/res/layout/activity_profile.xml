@@ -166,7 +166,7 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="16dp"
                                     android:gravity="center"
-                                    android:text="Event enthusiast and community builder. I enjoy bringing people together for tech talks and product showcases."
+                                    android:text="Welcome to my profile!"
                                     android:textColor="@color/app_text_light"
                                     android:textSize="14sp"
                                     android:lineSpacingExtra="2dp" />
@@ -205,7 +205,7 @@
 
                         </androidx.cardview.widget.CardView>
 
-                        <!-- Events Card - Now matching PublicProfileActivity exactly -->
+                        <!-- Events Card - UPDATED to match PublicProfileActivity exactly -->
                         <androidx.cardview.widget.CardView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -268,7 +268,7 @@
                                         android:minHeight="100dp"
                                         android:maxHeight="400dp" />
 
-                                    <!-- Empty State for Upcoming -->
+                                    <!-- Compact Empty State for Upcoming -->
                                     <LinearLayout
                                         android:id="@+id/upcomingEmptyState"
                                         android:layout_width="match_parent"
@@ -344,7 +344,7 @@
                                         android:minHeight="100dp"
                                         android:maxHeight="400dp" />
 
-                                    <!-- Empty State for Past -->
+                                    <!-- Compact Empty State for Past -->
                                     <LinearLayout
                                         android:id="@+id/pastEmptyState"
                                         android:layout_width="match_parent"
