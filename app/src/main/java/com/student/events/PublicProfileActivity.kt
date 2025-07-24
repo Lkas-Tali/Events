@@ -40,8 +40,10 @@ import java.util.*
 class PublicProfileActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityPublicProfileBinding
+    // --- FIX STARTS HERE: Use two separate adapters ---
     private lateinit var upcomingEventsAdapter: EventsAdapter
     private lateinit var pastEventsAdapter: EventsAdapter
+    // --- FIX ENDS HERE ---
     private lateinit var auth: FirebaseAuth
     private lateinit var database: FirebaseDatabase
     private lateinit var emailService: EmailService
@@ -377,19 +379,16 @@ class PublicProfileActivity : AppCompatActivity() {
         return try {
             val dateTimeSnapshot = snapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
-                // COMPATIBILITY: Check for both "_seconds" (from app) and "seconds" (from web)
                 val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java)
                     ?: dateTimeSnapshot.child("seconds").getValue(Long::class.java)
                     ?: 0L
 
-                // COMPATIBILITY: Check for both "_nanoseconds" (from app) and "nanoseconds" (from web)
                 val nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java)
                     ?: dateTimeSnapshot.child("nanoseconds").getValue(Long::class.java)
                     ?: 0L
 
                 com.student.events.models.DateTime(seconds = seconds, nanoseconds = nanoseconds)
             } else {
-                // Fallback for older data structure
                 val dateString = snapshot.child("date").getValue(String::class.java)
                 val timeString = snapshot.child("time").getValue(String::class.java)
 
@@ -430,6 +429,8 @@ class PublicProfileActivity : AppCompatActivity() {
 
     private fun setupRecyclerViews() {
         try {
+            // --- FIX: Apply the EXACT same RecyclerView configuration as MainActivity ---
+
             upcomingEventsAdapter = EventsAdapter(
                 events = emptyList(),
                 currentUserId = currentUserId ?: "",
@@ -462,14 +463,25 @@ class PublicProfileActivity : AppCompatActivity() {
                 onCancelRsvpClick = { }
             )
 
+            // --- CRITICAL FIX: Apply MainActivity's exact RecyclerView configuration ---
             binding.upcomingEventsRecyclerView.apply {
                 layoutManager = LinearLayoutManager(this@PublicProfileActivity)
                 adapter = upcomingEventsAdapter
+                // KEY FIXES from MainActivity:
+                isNestedScrollingEnabled = false
+                setHasFixedSize(false)
+                // Enable hardware acceleration for alpha rendering
+                setLayerType(View.LAYER_TYPE_HARDWARE, null)
             }
 
             binding.pastEventsRecyclerView.apply {
                 layoutManager = LinearLayoutManager(this@PublicProfileActivity)
                 adapter = pastEventsAdapter
+                // KEY FIXES from MainActivity:
+                isNestedScrollingEnabled = false
+                setHasFixedSize(false)
+                // Enable hardware acceleration for alpha rendering
+                setLayerType(View.LAYER_TYPE_HARDWARE, null)
             }
 
         } catch (e: Exception) {
@@ -490,30 +502,20 @@ class PublicProfileActivity : AppCompatActivity() {
         }
     }
 
+    // --- FIX STARTS HERE: Update the correct adapter instance ---
     private fun updateEventsList() {
         try {
-            if (upcomingEvents.isEmpty()) {
-                binding.upcomingEventsRecyclerView.visibility = View.GONE
-                binding.upcomingEmptyState.visibility = View.VISIBLE
-            } else {
-                binding.upcomingEventsRecyclerView.visibility = View.VISIBLE
-                binding.upcomingEmptyState.visibility = View.GONE
-                upcomingEventsAdapter.updateEvents(upcomingEvents)
-            }
+            upcomingEventsAdapter.updateEvents(upcomingEvents)
+            binding.upcomingEmptyState.visibility = if (upcomingEvents.isEmpty()) View.VISIBLE else View.GONE
 
-            if (pastEvents.isEmpty()) {
-                binding.pastEventsRecyclerView.visibility = View.GONE
-                binding.pastEmptyState.visibility = View.VISIBLE
-            } else {
-                binding.pastEventsRecyclerView.visibility = View.VISIBLE
-                binding.pastEmptyState.visibility = View.GONE
-                pastEventsAdapter.updateEvents(pastEvents)
-            }
+            pastEventsAdapter.updateEvents(pastEvents)
+            binding.pastEmptyState.visibility = if (pastEvents.isEmpty()) View.VISIBLE else View.GONE
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error updating events list: ${e.message}", e)
         }
     }
+    // --- FIX ENDS HERE ---
 
     private fun updateTotalEventsCount() {
         val totalEvents = upcomingEvents.size + pastEvents.size

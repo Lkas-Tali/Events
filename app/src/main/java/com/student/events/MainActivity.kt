@@ -732,6 +732,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun filterEvents(events: List<Event>): List<Event> {
+        val currentTime = System.currentTimeMillis() / 1000
         return events.filter { event ->
             val matchesSearch = searchQuery.isEmpty() ||
                     event.title.contains(searchQuery, ignoreCase = true) ||
@@ -741,7 +742,14 @@ class MainActivity : AppCompatActivity() {
             val eventDate = event.dateTime?.seconds?.let { Date(it * 1000) }
             val matchesDateRange = (startDateFilter == null || eventDate?.after(startDateFilter) != false) &&
                     (endDateFilter == null || eventDate?.before(endDateFilter) != false)
-            matchesSearch && matchesLocation && matchesDateRange
+
+            val isFutureEventForDiscover = if (currentTab == "discover") {
+                event.dateTime?.seconds ?: 0 > currentTime
+            } else {
+                true
+            }
+
+            matchesSearch && matchesLocation && matchesDateRange && isFutureEventForDiscover
         }
     }
 
