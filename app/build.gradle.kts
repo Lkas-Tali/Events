@@ -95,4 +95,7 @@ dependencies {
     // Lifecycle components
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+
+    // Add the Firebase Cloud Messaging dependency
+    implementation(libs.firebase.messaging.ktx)
 }

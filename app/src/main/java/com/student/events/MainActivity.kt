@@ -20,10 +20,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -35,15 +33,15 @@ import com.bumptech.glide.Glide
 import com.google.android.material.tabs.TabLayout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
-import com.google.firebase.database.ServerValue
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.storage.FirebaseStorage
 import com.student.events.adapters.EventsAdapter
 import com.student.events.databinding.ActivityMainBinding
+import com.student.events.models.Attendee
+import com.student.events.models.DateTime
 import com.student.events.models.Event
 import com.student.events.models.Notification
 import com.student.events.models.Organizer
-import com.student.events.models.DateTime
-import com.student.events.models.Attendee
 import com.student.events.services.AuthStateManager
 import java.text.SimpleDateFormat
 import java.util.*
@@ -118,6 +116,12 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // Get and store FCM token
+        getAndStoreFcmToken()
+
+        // Handle incoming notification intent
+        handleNotificationIntent(intent)
+
         applySystemBarInsets()
         setupViews()
         setupSwipeRefresh()
@@ -127,6 +131,63 @@ class MainActivity : AppCompatActivity() {
 
         setupAuthStateListener()
         setupRealTimeListeners()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        val eventId = intent?.getStringExtra("eventId")
+        if (eventId != null) {
+            Log.d(TAG, "Received eventId from notification: $eventId")
+            // Find the event and show its details
+            database.reference.child("events").child(eventId)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        if (snapshot.exists()) {
+                            val event = parseEventFromSnapshot(snapshot, eventId)
+                            if (event != null) {
+                                showCustomEventDetails(event, fromInviteNotification = true)
+                            }
+                        }
+                    }
+
+                    override fun onCancelled(error: DatabaseError) {
+                        Log.e(TAG, "Failed to fetch event from notification: ${error.message}")
+                    }
+                })
+        }
+    }
+
+
+    private fun getAndStoreFcmToken() {
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w(TAG, "Fetching FCM registration token failed", task.exception)
+                return@addOnCompleteListener
+            }
+
+            // Get new FCM registration token
+            val token = task.result
+
+            // Log and toast
+            Log.d(TAG, "FCM Token: $token")
+            sendTokenToDatabase(token)
+        }
+    }
+
+    private fun sendTokenToDatabase(token: String) {
+        if (currentUserId != null) {
+            database.reference.child("users")
+                .child(currentUserId!!)
+                .child("fcmToken")
+                .setValue(token)
+                .addOnSuccessListener {
+                    Log.d(TAG, "FCM token successfully updated in DB.")
+                }
+        }
     }
 
     private fun checkUserAuthentication(): Boolean {
@@ -441,19 +502,16 @@ class MainActivity : AppCompatActivity() {
         return try {
             val dateTimeSnapshot = snapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
-                // COMPATIBILITY: Check for both "_seconds" (from app) and "seconds" (from web)
                 val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java)
                     ?: dateTimeSnapshot.child("seconds").getValue(Long::class.java)
                     ?: 0L
 
-                // COMPATIBILITY: Check for both "_nanoseconds" (from app) and "nanoseconds" (from web)
                 val nanoseconds = dateTimeSnapshot.child("_nanoseconds").getValue(Long::class.java)
                     ?: dateTimeSnapshot.child("nanoseconds").getValue(Long::class.java)
                     ?: 0L
 
                 DateTime(seconds = seconds, nanoseconds = nanoseconds)
             } else {
-                // Fallback for older data structure without a 'dateTime' object
                 val dateString = snapshot.child("date").getValue(String::class.java)
                 val timeString = snapshot.child("time").getValue(String::class.java)
 
@@ -554,7 +612,8 @@ class MainActivity : AppCompatActivity() {
         binding.nestedScrollView.setOnScrollChangeListener(NestedScrollView.OnScrollChangeListener { v, _, scrollY, _, oldScrollY ->
             if (v.getChildAt(v.childCount - 1) != null) {
                 if ((scrollY >= (v.getChildAt(v.childCount - 1).measuredHeight - v.measuredHeight)) &&
-                    scrollY > oldScrollY && isDataLoaded) {
+                    scrollY > oldScrollY && isDataLoaded
+                ) {
                     loadMoreEvents()
                 }
             }
@@ -572,6 +631,7 @@ class MainActivity : AppCompatActivity() {
                     resetAndLoadEvents()
                 }
             }
+
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
             override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
@@ -716,7 +776,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateEmptyState(isEmpty: Boolean) {
         binding.emptyStateText.visibility = if (isEmpty && !isLoading && isDataLoaded) View.VISIBLE else View.GONE
-        if(isEmpty && isDataLoaded) {
+        if (isEmpty && isDataLoaded) {
             binding.emptyStateText.text = when (currentTab) {
                 "discover" -> "No events to discover yet."
                 "myEvents" -> "You haven't created any events yet."
@@ -834,9 +894,7 @@ class MainActivity : AppCompatActivity() {
                 invitationContextText.text = "You've been invited to this event"
                 invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_person_add, 0, 0, 0)
 
-                // --- FIX STARTS HERE ---
-                actionButton.text = "Accept" // Changed from "Accept Invitation"
-                // --- FIX ENDS HERE ---
+                actionButton.text = "Accept"
                 actionButton.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.app_primary_blue))
                 actionButton.setOnClickListener {
                     handleRsvpFromDetails(event, view)
@@ -849,15 +907,12 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "Invitation declined", Toast.LENGTH_SHORT).show()
                 }
 
-                // --- FIX STARTS HERE ---
-                // Make buttons symmetrical by applying equal weight
                 val commonLayoutParams = LinearLayout.LayoutParams(
-                    0, // Set width to 0 to allow weight to take over
+                    0,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
-                    1f // Assign equal weight to both buttons
+                    1f
                 )
 
-                // Add some margin between the buttons
                 val marginInPixels = (4 * resources.displayMetrics.density).toInt()
                 val acceptParams = LinearLayout.LayoutParams(commonLayoutParams)
                 acceptParams.marginEnd = marginInPixels
@@ -866,7 +921,6 @@ class MainActivity : AppCompatActivity() {
                 val declineParams = LinearLayout.LayoutParams(commonLayoutParams)
                 declineParams.marginStart = marginInPixels
                 secondaryButton.layoutParams = declineParams
-                // --- FIX ENDS HERE ---
             }
         } else {
             Log.d(TAG, "ℹ️ Hiding RSVP buttons - accessed from event card (details only)")
@@ -1248,10 +1302,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun showDatePicker(onDateSelected: (Date) -> Unit) {
         val calendar = Calendar.getInstance()
-        val dialog = android.app.DatePickerDialog(this, { _, year, month, dayOfMonth ->
-            calendar.set(year, month, dayOfMonth)
-            onDateSelected(calendar.time)
-        },
+        val dialog = android.app.DatePickerDialog(
+            this, { _, year, month, dayOfMonth ->
+                calendar.set(year, month, dayOfMonth)
+                onDateSelected(calendar.time)
+            },
             calendar.get(Calendar.YEAR),
             calendar.get(Calendar.MONTH),
             calendar.get(Calendar.DAY_OF_MONTH)

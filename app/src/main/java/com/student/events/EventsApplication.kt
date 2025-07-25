@@ -13,6 +13,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.student.events.services.AuthenticationService
+import com.student.events.util.NotificationUtils // Import NotificationUtils
 import kotlinx.coroutines.*
 
 class EventsApplication : Application(), LifecycleObserver {
@@ -47,6 +48,9 @@ class EventsApplication : Application(), LifecycleObserver {
         INSTANCE = this
 
         Log.d(TAG, "Application starting...")
+
+        // Create Notification Channel
+        NotificationUtils.createNotificationChannel(this)
 
         // Initialize SharedPreferences
         sessionPrefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -262,6 +266,7 @@ class EventsApplication : Application(), LifecycleObserver {
         // Stop authentication service
         AuthenticationService.stopService(this)
     }
+
 
     private fun preserveSessionOnCrash() {
         try {
