@@ -541,7 +541,7 @@ class PublicProfileActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.locationText).text = event.location
         view.findViewById<TextView>(R.id.descriptionText).text = event.description
         view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
-        view.findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
+        view.findViewById<TextView>(R.id.organizerText).text = "${event.organizer?.fullName ?: "Unknown"}"
 
         val organizerSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
         organizerSection.isClickable = false

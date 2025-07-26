@@ -12,6 +12,7 @@ import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.TextView
 import com.bumptech.glide.Glide
+import com.google.firebase.auth.FirebaseAuth
 import com.student.events.models.Event
 import java.text.SimpleDateFormat
 import java.util.*
@@ -21,6 +22,9 @@ class EventDetailsDialog(
     private val event: Event
     // FIX: The style is changed to the new BlurredDialog style
 ) : Dialog(context, R.style.BlurredDialog) {
+
+    // Get the current user ID to check against the organizer
+    private val currentUserId: String? = FirebaseAuth.getInstance().currentUser?.uid
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,7 +75,23 @@ class EventDetailsDialog(
         findViewById<TextView>(R.id.locationText).text = event.location
         findViewById<TextView>(R.id.descriptionText).text = event.description
         findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
-        findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
+
+        // --- FIX STARTS HERE ---
+        // Add logic to check if the current user is the organizer.
+        val organizerText = findViewById<TextView>(R.id.organizerText)
+        val organizerName = event.organizer?.fullName ?: "Unknown"
+        val organizerUid = event.organizer?.uid
+
+        if (organizerUid != null && organizerUid == currentUserId) {
+            // If the current user is the organizer, append "(You)" and change color.
+            organizerText.text = "$organizerName (You)"
+            organizerText.setTextColor(context.resources.getColor(R.color.app_text_secondary, null))
+        } else {
+            // Otherwise, just show the name with the default color.
+            organizerText.text = organizerName
+            organizerText.setTextColor(context.resources.getColor(R.color.app_text_primary, null))
+        }
+        // --- FIX ENDS HERE ---
     }
 
     private fun formatDateTime(event: Event): String {

@@ -241,9 +241,16 @@ class MainActivity : AppCompatActivity() {
             if (user == null && !isAuthenticating) {
                 val isSessionValid = sessionPrefs.getBoolean(KEY_USER_LOGGED_IN, false)
                 if (isSessionValid) {
-                    Log.w(TAG, "⚠️ Firebase user null but session valid - possible device-specific issue")
+                    Log.w(
+                        TAG,
+                        "⚠️ Firebase user null but session valid - possible device-specific issue"
+                    )
                     Handler(Looper.getMainLooper()).postDelayed({
-                        if (auth.currentUser == null && sessionPrefs.getBoolean(KEY_USER_LOGGED_IN, false)) {
+                        if (auth.currentUser == null && sessionPrefs.getBoolean(
+                                KEY_USER_LOGGED_IN,
+                                false
+                            )
+                        ) {
                             Log.w(TAG, "Firebase user still null after delay - keeping session")
                         }
                     }, 3000)
@@ -330,9 +337,13 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         val fullName = snapshot.child("fullName").getValue(String::class.java)
-                        val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java)
+                        val profileImageUrl =
+                            snapshot.child("profileImageUrl").getValue(String::class.java)
 
-                        Log.d(TAG, "User data updated - Name: $fullName, Image: ${!profileImageUrl.isNullOrEmpty()}")
+                        Log.d(
+                            TAG,
+                            "User data updated - Name: $fullName, Image: ${!profileImageUrl.isNullOrEmpty()}"
+                        )
 
                         val firstName = fullName?.split(" ")?.firstOrNull()
                             ?: auth.currentUser?.displayName?.split(" ")?.firstOrNull()
@@ -354,7 +365,8 @@ class MainActivity : AppCompatActivity() {
                         clearSessionData()
                         navigateToLogin()
                     } else {
-                        val fallbackName = auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
+                        val fallbackName =
+                            auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
                         binding.userNameText.text = fallbackName
                         loadAvatarImage(null)
                     }
@@ -409,7 +421,10 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
 
-                    Log.d(TAG, "Final counts - All: ${allEvents.size}, My: ${myEvents.size}, Attending: ${attendingEvents.size}")
+                    Log.d(
+                        TAG,
+                        "Final counts - All: ${allEvents.size}, My: ${myEvents.size}, Attending: ${attendingEvents.size}"
+                    )
 
                     sortEventsByDate(allEvents)
                     sortEventsByDate(myEvents)
@@ -423,7 +438,11 @@ class MainActivity : AppCompatActivity() {
 
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing events data: ${e.message}", e)
-                    Toast.makeText(this@MainActivity, "Error loading events: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Error loading events: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
                     binding.loadingMoreLayout.visibility = View.GONE
                 }
             }
@@ -440,6 +459,7 @@ class MainActivity : AppCompatActivity() {
                         navigateToLogin()
                         return
                     }
+
                     DatabaseError.NETWORK_ERROR -> "Network error. Please check your connection."
                     else -> "Failed to load events: ${error.message}"
                 }
@@ -463,7 +483,8 @@ class MainActivity : AppCompatActivity() {
             val organizer = if (organizerSnapshot.exists()) {
                 Organizer(
                     uid = organizerSnapshot.child("uid").getValue(String::class.java) ?: "",
-                    fullName = organizerSnapshot.child("fullName").getValue(String::class.java) ?: ""
+                    fullName = organizerSnapshot.child("fullName").getValue(String::class.java)
+                        ?: ""
                 )
             } else null
 
@@ -474,8 +495,10 @@ class MainActivity : AppCompatActivity() {
             for (attendeeSnapshot in attendeesSnapshot.children) {
                 val attendeeId = attendeeSnapshot.key ?: continue
                 val attendee = Attendee(
-                    fullName = attendeeSnapshot.child("fullName").getValue(String::class.java) ?: "",
-                    profileImageUrl = attendeeSnapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+                    fullName = attendeeSnapshot.child("fullName").getValue(String::class.java)
+                        ?: "",
+                    profileImageUrl = attendeeSnapshot.child("profileImageUrl")
+                        .getValue(String::class.java) ?: ""
                 )
                 attendeesMap[attendeeId] = attendee
             }
@@ -594,7 +617,12 @@ class MainActivity : AppCompatActivity() {
         eventsAdapter = EventsAdapter(
             events = displayedEvents,
             currentUserId = currentUserId ?: "",
-            onEventClick = { event -> showCustomEventDetails(event, fromInviteNotification = false) },
+            onEventClick = { event ->
+                showCustomEventDetails(
+                    event,
+                    fromInviteNotification = false
+                )
+            },
             onEditClick = { event -> showEditEventDialog(event) },
             onCancelClick = { event -> showCancelEventDialog(event) },
             onRsvpClick = { event -> handleRsvp(event) },
@@ -651,11 +679,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.filterButton.setOnClickListener {
-            binding.filterPanel.visibility = if (binding.filterPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            binding.filterPanel.visibility =
+                if (binding.filterPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
         binding.createEventButton.setOnClickListener {
-            startActivityForResult(Intent(this, CreateEventActivity::class.java), CREATE_EVENT_REQUEST)
+            startActivityForResult(
+                Intent(this, CreateEventActivity::class.java),
+                CREATE_EVENT_REQUEST
+            )
         }
 
         binding.logoutButton.setOnClickListener { showLogoutConfirmation() }
@@ -667,7 +699,12 @@ class MainActivity : AppCompatActivity() {
         binding.startDateInput.setOnClickListener {
             showDatePicker { date ->
                 startDateFilter = date
-                binding.startDateInput.setText(SimpleDateFormat("dd/MM/yyyy", Locale.UK).format(date))
+                binding.startDateInput.setText(
+                    SimpleDateFormat(
+                        "dd/MM/yyyy",
+                        Locale.UK
+                    ).format(date)
+                )
                 if (isDataLoaded) {
                     resetAndLoadEvents()
                 }
@@ -764,7 +801,8 @@ class MainActivity : AppCompatActivity() {
 
         hasMoreEvents = currentDisplayedCount < filteredList.size
         updateEmptyState(displayedEvents.isEmpty())
-        binding.loadingMoreLayout.visibility = if (hasMoreEvents && filteredList.size > currentDisplayedCount) View.VISIBLE else View.GONE
+        binding.loadingMoreLayout.visibility =
+            if (hasMoreEvents && filteredList.size > currentDisplayedCount) View.VISIBLE else View.GONE
         isLoading = false
     }
 
@@ -775,7 +813,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateEmptyState(isEmpty: Boolean) {
-        binding.emptyStateText.visibility = if (isEmpty && !isLoading && isDataLoaded) View.VISIBLE else View.GONE
+        binding.emptyStateText.visibility =
+            if (isEmpty && !isLoading && isDataLoaded) View.VISIBLE else View.GONE
         if (isEmpty && isDataLoaded) {
             binding.emptyStateText.text = when (currentTab) {
                 "discover" -> "No events to discover yet."
@@ -802,8 +841,9 @@ class MainActivity : AppCompatActivity() {
             val matchesLocation = locationFilter.isEmpty() ||
                     event.location.contains(locationFilter, ignoreCase = true)
             val eventDate = event.dateTime?.seconds?.let { Date(it * 1000) }
-            val matchesDateRange = (startDateFilter == null || eventDate?.after(startDateFilter) != false) &&
-                    (endDateFilter == null || eventDate?.before(endDateFilter) != false)
+            val matchesDateRange =
+                (startDateFilter == null || eventDate?.after(startDateFilter) != false) &&
+                        (endDateFilter == null || eventDate?.before(endDateFilter) != false)
 
             val isFutureEventForDiscover = if (currentTab == "discover") {
                 event.dateTime?.seconds ?: 0 > currentTime
@@ -817,7 +857,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun showCustomEventDetails(event: Event, fromInviteNotification: Boolean = false) {
         setMainContentInteraction(false)
-        val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
+        val detailsView = LayoutInflater.from(this)
+            .inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
         populateDetailsView(detailsView, event, fromInviteNotification)
         binding.eventDetailsContainer.addView(detailsView)
 
@@ -825,7 +866,11 @@ class MainActivity : AppCompatActivity() {
         animateDetailsIn(detailsView)
     }
 
-    private fun populateDetailsView(view: View, event: Event, fromInviteNotification: Boolean = false) {
+    private fun populateDetailsView(
+        view: View,
+        event: Event,
+        fromInviteNotification: Boolean = false
+    ) {
         view.findViewById<TextView>(R.id.eventTitle).text = event.title
         view.findViewById<ImageView>(R.id.closeButton).setOnClickListener {
             animateDetailsOut(view)
@@ -842,20 +887,49 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.dateTimeText).text = formatDateTime(event)
         view.findViewById<TextView>(R.id.locationText).text = event.location
         view.findViewById<TextView>(R.id.descriptionText).text = event.description
-        view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
-        view.findViewById<TextView>(R.id.organizerText).text = "Organized by ${event.organizer?.fullName ?: "Unknown"}"
+        view.findViewById<TextView>(R.id.attendeesText).text =
+            "${event.attendeesCount} people attending"
 
+        // --- FIX STARTS HERE ---
+        val organizerText = view.findViewById<TextView>(R.id.organizerText)
+        val organizerName = event.organizer?.fullName ?: "Unknown"
+        val organizerUid = event.organizer?.uid
         val organizerSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
-        organizerSection.setOnClickListener {
-            event.organizer?.let { organizer ->
-                Log.d(TAG, "📱 Navigating to organizer profile: ${organizer.fullName}")
-                animateDetailsOut(view)
+        val organizerHintText = view.findViewById<TextView>(R.id.organizerHintText)
+        val organizerArrow = view.findViewById<ImageView>(R.id.organizerArrow)
 
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    startActivity(PublicProfileActivity.newIntent(this@MainActivity, organizer.uid, organizer.fullName))
-                }, 300)
+        if (organizerUid != null && organizerUid == currentUserId) {
+            // If the current user is the organizer, show "(You)" and make it not clickable.
+            organizerText.text = "$organizerName (You)"
+            organizerText.setTextColor(resources.getColor(R.color.app_text_secondary, null))
+            organizerSection.setOnClickListener(null)
+            organizerSection.isClickable = false
+            organizerHintText.visibility = View.GONE
+            organizerArrow.visibility = View.GONE
+        } else {
+            // Otherwise, show the name normally and make it clickable to view their profile.
+            organizerText.text = organizerName
+            organizerText.setTextColor(resources.getColor(R.color.app_primary_blue, null))
+            organizerHintText.visibility = View.VISIBLE
+            organizerArrow.visibility = View.VISIBLE
+            organizerSection.setOnClickListener {
+                event.organizer?.let { organizer ->
+                    Log.d(TAG, "📱 Navigating to organizer profile: ${organizer.fullName}")
+                    animateDetailsOut(view)
+
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        startActivity(
+                            PublicProfileActivity.newIntent(
+                                this@MainActivity,
+                                organizer.uid,
+                                organizer.fullName
+                            )
+                        )
+                    }, 300)
+                }
             }
         }
+        // --- FIX ENDS HERE ---
 
         val actionButtonsContainer = view.findViewById<LinearLayout>(R.id.actionButtonsContainer)
         val invitationContextText = view.findViewById<TextView>(R.id.invitationContextText)
@@ -881,10 +955,16 @@ class MainActivity : AppCompatActivity() {
 
             } else if (isAttending) {
                 invitationContextText.text = "You're already attending this event"
-                invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_check_circle, 0, 0, 0)
+                invitationContextText.setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.ic_check_circle,
+                    0,
+                    0,
+                    0
+                )
 
                 actionButton.text = "Cancel RSVP"
-                actionButton.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.app_error))
+                actionButton.backgroundTintList =
+                    android.content.res.ColorStateList.valueOf(getColor(R.color.app_error))
                 actionButton.setOnClickListener {
                     handleCancelRsvpFromDetails(event, view)
                 }
@@ -892,10 +972,16 @@ class MainActivity : AppCompatActivity() {
 
             } else {
                 invitationContextText.text = "You've been invited to this event"
-                invitationContextText.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_person_add, 0, 0, 0)
+                invitationContextText.setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.ic_person_add,
+                    0,
+                    0,
+                    0
+                )
 
                 actionButton.text = "Accept"
-                actionButton.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.app_primary_blue))
+                actionButton.backgroundTintList =
+                    android.content.res.ColorStateList.valueOf(getColor(R.color.app_primary_blue))
                 actionButton.setOnClickListener {
                     handleRsvpFromDetails(event, view)
                 }
@@ -904,7 +990,8 @@ class MainActivity : AppCompatActivity() {
                 secondaryButton.visibility = View.VISIBLE
                 secondaryButton.setOnClickListener {
                     animateDetailsOut(view)
-                    Toast.makeText(this@MainActivity, "Invitation declined", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Invitation declined", Toast.LENGTH_SHORT)
+                        .show()
                 }
 
                 val commonLayoutParams = LinearLayout.LayoutParams(
@@ -933,8 +1020,10 @@ class MainActivity : AppCompatActivity() {
             Log.d(TAG, "✅ RSVP to event from details: ${event.title}")
 
             database.reference.child("users").child(uid).get().addOnSuccessListener { snapshot ->
-                val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
-                val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+                val fullName =
+                    snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+                val profileImageUrl =
+                    snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
 
                 val updates = hashMapOf<String, Any>(
                     "events/${event.id}/attendees/$uid/fullName" to fullName,
@@ -945,17 +1034,26 @@ class MainActivity : AppCompatActivity() {
                 database.reference.updateChildren(updates)
                     .addOnSuccessListener {
                         Log.d(TAG, "✅ RSVP successful from details dialog")
-                        Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_LONG).show()
+                        Toast.makeText(
+                            this,
+                            "You have successfully RSVP'd to \"${event.title}\"!",
+                            Toast.LENGTH_LONG
+                        ).show()
 
                         event.organizer?.uid?.let { organizerId ->
-                            createNotification(organizerId, "rsvp", "$fullName RSVP'd to ${event.title}.")
+                            createNotification(
+                                organizerId,
+                                "rsvp",
+                                "$fullName RSVP'd to ${event.title}."
+                            )
                         }
 
                         animateDetailsOut(detailsView)
                     }
                     .addOnFailureListener { e ->
                         Log.e(TAG, "❌ RSVP failed from details: ${e.message}")
-                        Toast.makeText(this, "Failed to RSVP: ${e.message}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Failed to RSVP: ${e.message}", Toast.LENGTH_SHORT)
+                            .show()
                     }
             }
         }
@@ -973,13 +1071,18 @@ class MainActivity : AppCompatActivity() {
             database.reference.updateChildren(updates)
                 .addOnSuccessListener {
                     Log.d(TAG, "✅ RSVP cancelled successfully from details dialog")
-                    Toast.makeText(this, "RSVP cancelled for \"${event.title}\"", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this,
+                        "RSVP cancelled for \"${event.title}\"",
+                        Toast.LENGTH_SHORT
+                    ).show()
 
                     animateDetailsOut(detailsView)
                 }
                 .addOnFailureListener { e ->
                     Log.e(TAG, "❌ Cancel RSVP failed from details: ${e.message}")
-                    Toast.makeText(this, "Failed to cancel RSVP: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Failed to cancel RSVP: ${e.message}", Toast.LENGTH_SHORT)
+                        .show()
                 }
         }
     }
@@ -987,7 +1090,8 @@ class MainActivity : AppCompatActivity() {
     private fun acceptInvitation(event: Event, userId: String) {
         database.reference.child("users").child(userId).get().addOnSuccessListener { snapshot ->
             val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
-            val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+            val profileImageUrl =
+                snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
 
             val updates = hashMapOf<String, Any>(
                 "events/${event.id}/invitations/$userId/status" to "accepted",
@@ -1003,7 +1107,11 @@ class MainActivity : AppCompatActivity() {
 
             database.reference.updateChildren(updates)
                 .addOnSuccessListener {
-                    Toast.makeText(this, "Invitation accepted! You're now attending \"${event.title}\"", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this,
+                        "Invitation accepted! You're now attending \"${event.title}\"",
+                        Toast.LENGTH_SHORT
+                    ).show()
 
                     event.organizer?.uid?.let { organizerId ->
                         createInvitationNotification(
@@ -1023,7 +1131,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun createInvitationNotification(userId: String, type: String, text: String, eventId: String? = null, eventTitle: String? = null) {
+    private fun createInvitationNotification(
+        userId: String,
+        type: String,
+        text: String,
+        eventId: String? = null,
+        eventTitle: String? = null
+    ) {
         val notification = mutableMapOf<String, Any>(
             "type" to type,
             "text" to text,
@@ -1190,39 +1304,55 @@ class MainActivity : AppCompatActivity() {
                         if (snapshot.exists()) {
                             acceptInvitation(event, uid)
                         } else {
-                            database.reference.child("users").child(uid).get().addOnSuccessListener { userSnapshot ->
-                                val fullName = userSnapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
-                                val profileImageUrl = userSnapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+                            database.reference.child("users").child(uid).get()
+                                .addOnSuccessListener { userSnapshot ->
+                                    val fullName =
+                                        userSnapshot.child("fullName").getValue(String::class.java)
+                                            ?: "Unknown User"
+                                    val profileImageUrl = userSnapshot.child("profileImageUrl")
+                                        .getValue(String::class.java) ?: ""
 
-                                val updates = hashMapOf<String, Any>(
-                                    "events/${event.id}/attendees/$uid/fullName" to fullName,
-                                    "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
-                                    "events/${event.id}/attendeesCount" to event.attendeesCount + 1
-                                )
+                                    val updates = hashMapOf<String, Any>(
+                                        "events/${event.id}/attendees/$uid/fullName" to fullName,
+                                        "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
+                                        "events/${event.id}/attendeesCount" to event.attendeesCount + 1
+                                    )
 
-                                database.reference.updateChildren(updates)
-                                    .addOnSuccessListener {
-                                        Toast.makeText(this@MainActivity, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
+                                    database.reference.updateChildren(updates)
+                                        .addOnSuccessListener {
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "You have successfully RSVP'd to \"${event.title}\"!",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
 
-                                        event.organizer?.uid?.let { organizerId ->
-                                            createInvitationNotification(
-                                                organizerId,
-                                                "rsvp",
-                                                "$fullName RSVP'd to ${event.title}.",
-                                                event.id,
-                                                event.title
-                                            )
+                                            event.organizer?.uid?.let { organizerId ->
+                                                createInvitationNotification(
+                                                    organizerId,
+                                                    "rsvp",
+                                                    "$fullName RSVP'd to ${event.title}.",
+                                                    event.id,
+                                                    event.title
+                                                )
+                                            }
                                         }
-                                    }
-                                    .addOnFailureListener {
-                                        Toast.makeText(this@MainActivity, "Failed to RSVP", Toast.LENGTH_SHORT).show()
-                                    }
-                            }
+                                        .addOnFailureListener {
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "Failed to RSVP",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                }
                         }
                     }
 
                     override fun onCancelled(error: DatabaseError) {
-                        Toast.makeText(this@MainActivity, "Error processing RSVP", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Error processing RSVP",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 })
         }
@@ -1271,7 +1401,11 @@ class MainActivity : AppCompatActivity() {
             photoRef.delete().addOnSuccessListener {
                 deleteEventFromDatabase(event.id)
             }.addOnFailureListener {
-                Toast.makeText(this, "Failed to delete event image. Please try again.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    "Failed to delete event image. Please try again.",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         } else {
             deleteEventFromDatabase(event.id)
@@ -1295,8 +1429,16 @@ class MainActivity : AppCompatActivity() {
                 "events/${event.id}/attendeesCount" to (event.attendeesCount - 1).coerceAtLeast(0)
             )
             database.reference.updateChildren(updates)
-                .addOnSuccessListener { Toast.makeText(this, "RSVP cancelled", Toast.LENGTH_SHORT).show() }
-                .addOnFailureListener { Toast.makeText(this, "Failed to cancel RSVP", Toast.LENGTH_SHORT).show() }
+                .addOnSuccessListener {
+                    Toast.makeText(this, "RSVP cancelled", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener {
+                    Toast.makeText(
+                        this,
+                        "Failed to cancel RSVP",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
         }
     }
 
@@ -1334,7 +1476,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun showEventDetailsFromNotification(event: Event, notificationType: String) {
         setMainContentInteraction(false)
-        val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
+        val detailsView = LayoutInflater.from(this)
+            .inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
 
         populateDetailsView(detailsView, event)
 
@@ -1464,7 +1607,12 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Event created successfully!", Toast.LENGTH_SHORT).show()
                     binding.tabLayout.getTabAt(1)?.select()
                 }
-                EDIT_EVENT_REQUEST -> Toast.makeText(this, "Event updated successfully!", Toast.LENGTH_SHORT).show()
+
+                EDIT_EVENT_REQUEST -> Toast.makeText(
+                    this,
+                    "Event updated successfully!",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
