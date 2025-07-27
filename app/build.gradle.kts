@@ -32,6 +32,12 @@ android {
             )
         }
     }
+
+    // This block is required for MockK to work correctly
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     compileOptions {
         // Aligned Java version to match provided code
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -68,7 +74,7 @@ dependencies {
     // Added for Event card layout
     implementation(libs.androidx.cardview)
 
-    // NEW: Added for pull-to-refresh functionality
+    // Added for pull-to-refresh functionality
     implementation(libs.androidx.swiperefreshlayout)
 
     // Firebase (from your file)
@@ -81,15 +87,24 @@ dependencies {
     // Added for loading event images
     implementation(libs.glide)
 
-    // Testing libraries
+    // FIXED Testing libraries
     testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.mockk)
+    // testImplementation(libs.mockito.core) // REMOVED to resolve conflict with MockK
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.arch.core.testing)
+
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.kotlinx.coroutines.core)
 
     // Coroutines for async operations
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.play.services)
 
     // Lifecycle components

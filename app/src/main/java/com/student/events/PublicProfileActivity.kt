@@ -865,7 +865,6 @@ class PublicProfileActivity : AppCompatActivity() {
             showModalState(modalView, "loading")
 
             CoroutineScope(Dispatchers.Main).launch {
-
                 profileUserId?.let { recipientId ->
                     Log.d(TAG, "🔍 Getting recipient details for: $recipientId")
 
@@ -888,53 +887,48 @@ class PublicProfileActivity : AppCompatActivity() {
                                     }
 
                                     CoroutineScope(Dispatchers.Main).launch {
-                                        emailService.sendContactMessage(
+                                        val (success, errorMessage) = emailService.sendContactMessage(
                                             recipientEmail = recipientEmail,
                                             recipientName = recipientName,
                                             senderName = name,
                                             senderEmail = email,
                                             messageContent = message,
                                             eventContext = eventContext
-                                        ) { success, errorMessage ->
+                                        )
 
-                                            if (success) {
-                                                Log.i(TAG, "✅ EMAIL SENT SUCCESSFULLY!")
-                                                Log.i(TAG, "   To: ${maskEmailForLogging(recipientEmail)}")
-                                                Log.i(TAG, "   From: $name")
+                                        if (success) {
+                                            Log.i(TAG, "✅ EMAIL SENT SUCCESSFULLY!")
+                                            Log.i(TAG, "   To: ${maskEmailForLogging(recipientEmail)}")
+                                            Log.i(TAG, "   From: $name")
 
-                                                showModalState(modalView, "success")
+                                            showModalState(modalView, "success")
+                                            createEmailNotification(recipientId, name, email)
 
-                                                createEmailNotification(recipientId, name, email)
+                                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                                animateModalOut(modalView)
+                                            }, 2000)
 
-                                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                                    animateModalOut(modalView)
-                                                }, 2000)
+                                            Toast.makeText(this@PublicProfileActivity,
+                                                "Message sent successfully! They'll receive it via email.",
+                                                Toast.LENGTH_LONG).show()
+                                        } else {
+                                            Log.e(TAG, "❌ EMAIL SEND FAILED!")
+                                            Log.e(TAG, "   Error: $errorMessage")
+                                            Log.e(TAG, "   To: ${maskEmailForLogging(recipientEmail)}")
+                                            Log.e(TAG, "   From: $name")
 
-                                                Toast.makeText(this@PublicProfileActivity,
-                                                    "Message sent successfully! They'll receive it via email.",
-                                                    Toast.LENGTH_LONG).show()
+                                            showModalState(modalView, "success")
+                                            createFallbackNotification(recipientId, name, message)
 
-                                            } else {
-                                                Log.e(TAG, "❌ EMAIL SEND FAILED!")
-                                                Log.e(TAG, "   Error: $errorMessage")
-                                                Log.e(TAG, "   To: ${maskEmailForLogging(recipientEmail)}")
-                                                Log.e(TAG, "   From: $name")
+                                            Toast.makeText(this@PublicProfileActivity,
+                                                "Message sent via notification (email delivery failed)",
+                                                Toast.LENGTH_LONG).show()
 
-                                                showModalState(modalView, "success")
-
-                                                createFallbackNotification(recipientId, name, message)
-
-                                                Toast.makeText(this@PublicProfileActivity,
-                                                    "Message sent via notification (email delivery failed)",
-                                                    Toast.LENGTH_LONG).show()
-
-                                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                                    animateModalOut(modalView)
-                                                }, 2000)
-                                            }
+                                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                                animateModalOut(modalView)
+                                            }, 2000)
                                         }
                                     }
-
                                 } else {
                                     Log.w(TAG, "⚠️ No email found for recipient, using notification only")
 
@@ -968,7 +962,6 @@ class PublicProfileActivity : AppCompatActivity() {
                         })
                 }
             }
-
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error sending contact message: ${e.message}", e)
             Toast.makeText(this, "Failed to send message", Toast.LENGTH_SHORT).show()
@@ -1134,15 +1127,13 @@ class PublicProfileActivity : AppCompatActivity() {
             Log.d(TAG, "✅ RSVP to event: ${event.title}")
 
             database.reference.child("users").child(uid).get().addOnSuccessListener { snapshot ->
-                val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "Unknown User"
+                val fullName = snapshot.child("fullName").getValue(String::class.java) ?: "A User"
                 val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
-
                 val updates = hashMapOf<String, Any>(
                     "events/${event.id}/attendees/$uid/fullName" to fullName,
                     "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
                     "events/${event.id}/attendeesCount" to ServerValue.increment(1)
                 )
-
                 database.reference.updateChildren(updates)
                     .addOnSuccessListener {
                         Log.d(TAG, "✅ RSVP successful")

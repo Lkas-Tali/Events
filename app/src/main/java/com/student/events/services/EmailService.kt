@@ -40,10 +40,9 @@ class EmailService(private val context: Context) {
         fromName: String,
         fromEmail: String,
         subject: String,
-        message: String,
-        callback: (Boolean, String?) -> Unit
-    ) {
-        withContext(Dispatchers.IO) {
+        message: String
+    ): Pair<Boolean, String?> {
+        return withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "=".repeat(60))
                 Log.d(TAG, "🚀 STARTING EMAIL SEND PROCESS")
@@ -65,8 +64,7 @@ class EmailService(private val context: Context) {
                     val waitTime = MIN_EMAIL_INTERVAL - (currentTime - lastEmailTime)
                     val error = "Rate limited: Please wait ${waitTime}ms before sending another email"
                     Log.w(TAG, "⏱️ $error")
-                    withContext(Dispatchers.Main) { callback(false, error) }
-                    return@withContext
+                    return@withContext Pair(false, error)
                 }
                 lastEmailTime = currentTime
 
@@ -75,22 +73,20 @@ class EmailService(private val context: Context) {
                 if (!isValidEmail(toEmail)) {
                     val error = "Invalid recipient email format: $toEmail"
                     Log.e(TAG, "❌ $error")
-                    withContext(Dispatchers.Main) { callback(false, error) }
-                    return@withContext
+                    return@withContext Pair(false, error)
                 }
 
                 if (!isValidEmail(fromEmail)) {
                     val error = "Invalid sender email format: $fromEmail"
                     Log.e(TAG, "❌ $error")
-                    withContext(Dispatchers.Main) { callback(false, error) }
-                    return@withContext
+                    return@withContext Pair(false, error)
                 }
 
-                if (toName.isEmpty() || fromName.isEmpty() || subject.isEmpty() || message.isEmpty()) {
+                // FIX: Use isBlank() to catch empty or whitespace-only strings
+                if (toName.isBlank() || fromName.isBlank() || subject.isBlank() || message.isBlank()) {
                     val error = "Missing required fields: name, subject, or message"
                     Log.e(TAG, "❌ $error")
-                    withContext(Dispatchers.Main) { callback(false, error) }
-                    return@withContext
+                    return@withContext Pair(false, error)
                 }
 
                 Log.d(TAG, "✅ Input validation passed")
@@ -205,24 +201,22 @@ class EmailService(private val context: Context) {
                     errorBody
                 }
 
-                withContext(Dispatchers.Main) {
-                    if (responseCode == 200) {
-                        Log.i(TAG, "🎉 EMAIL SENT SUCCESSFULLY!")
-                        Log.i(TAG, "   Recipient: $toEmail")
-                        Log.i(TAG, "   Subject: $subject")
-                        Log.i(TAG, "   Timestamp: $timestamp")
-                        Log.d(TAG, "=".repeat(60))
-                        callback(true, "Email sent successfully")
-                    } else {
-                        val errorMsg = parseEmailJSError(responseCode, responseBody)
-                        Log.e(TAG, "💥 EMAIL SEND FAILED!")
-                        Log.e(TAG, "   Error Code: $responseCode")
-                        Log.e(TAG, "   Error Message: $errorMsg")
-                        Log.e(TAG, "   Recipient: $toEmail")
-                        Log.e(TAG, "   Subject: $subject")
-                        Log.d(TAG, "=".repeat(60))
-                        callback(false, errorMsg)
-                    }
+                if (responseCode == 200) {
+                    Log.i(TAG, "🎉 EMAIL SENT SUCCESSFULLY!")
+                    Log.i(TAG, "   Recipient: $toEmail")
+                    Log.i(TAG, "   Subject: $subject")
+                    Log.i(TAG, "   Timestamp: $timestamp")
+                    Log.d(TAG, "=".repeat(60))
+                    Pair(true, "Email sent successfully")
+                } else {
+                    val errorMsg = parseEmailJSError(responseCode, responseBody)
+                    Log.e(TAG, "💥 EMAIL SEND FAILED!")
+                    Log.e(TAG, "   Error Code: $responseCode")
+                    Log.e(TAG, "   Error Message: $errorMsg")
+                    Log.e(TAG, "   Recipient: $toEmail")
+                    Log.e(TAG, "   Subject: $subject")
+                    Log.d(TAG, "=".repeat(60))
+                    Pair(false, errorMsg)
                 }
 
             } catch (e: java.net.SocketTimeoutException) {
@@ -232,7 +226,7 @@ class EmailService(private val context: Context) {
                 Log.e(TAG, "   - Slow or unstable internet connection")
                 Log.e(TAG, "   - EmailJS servers are slow to respond")
                 Log.e(TAG, "   - Network firewall blocking the request")
-                withContext(Dispatchers.Main) { callback(false, errorMsg) }
+                Pair(false, errorMsg)
 
             } catch (e: java.net.UnknownHostException) {
                 val errorMsg = "Network error - unable to reach EmailJS servers"
@@ -241,7 +235,7 @@ class EmailService(private val context: Context) {
                 Log.e(TAG, "   - No internet connection")
                 Log.e(TAG, "   - DNS resolution failed")
                 Log.e(TAG, "   - EmailJS servers are down")
-                withContext(Dispatchers.Main) { callback(false, errorMsg) }
+                Pair(false, errorMsg)
 
             } catch (e: java.security.cert.CertificateException) {
                 val errorMsg = "SSL Certificate error"
@@ -249,7 +243,7 @@ class EmailService(private val context: Context) {
                 Log.e(TAG, "   This usually indicates:")
                 Log.e(TAG, "   - Device time/date is incorrect")
                 Log.e(TAG, "   - Certificate validation failed")
-                withContext(Dispatchers.Main) { callback(false, errorMsg) }
+                Pair(false, errorMsg)
 
             } catch (e: Exception) {
                 val errorMsg = "Unexpected error: ${e.javaClass.simpleName} - ${e.message}"
@@ -259,7 +253,7 @@ class EmailService(private val context: Context) {
                 e.stackTrace.take(5).forEach {
                     Log.e(TAG, "     at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})")
                 }
-                withContext(Dispatchers.Main) { callback(false, errorMsg) }
+                Pair(false, errorMsg)
             }
         }
     }
@@ -295,9 +289,12 @@ class EmailService(private val context: Context) {
      * Validate email format
      */
     private fun isValidEmail(email: String): Boolean {
-        return android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() &&
-                email.contains("@") &&
-                email.contains(".")
+        if (email.isBlank()) return false
+        // Add manual checks for patterns that are sometimes missed by the standard matcher
+        if (email.startsWith(".") || email.endsWith(".") || email.contains("..") || email.contains(".@") || email.contains("@.")) {
+            return false
+        }
+        return android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
     }
 
     /**
@@ -328,9 +325,8 @@ class EmailService(private val context: Context) {
         senderName: String,
         senderEmail: String,
         messageContent: String,
-        eventContext: String? = null,
-        callback: (Boolean, String?) -> Unit
-    ) {
+        eventContext: String? = null
+    ): Pair<Boolean, String?> {
         Log.d(TAG, "📬 Sending contact message...")
         Log.d(TAG, "   From: $senderName")
         Log.d(TAG, "   To: $recipientName")
@@ -360,14 +356,13 @@ class EmailService(private val context: Context) {
             appendLine("You can reply directly to this email to respond to $senderName.")
         }
 
-        sendEmail(
+        return sendEmail(
             toEmail = recipientEmail,
             toName = recipientName,
             fromName = "Events App on behalf of $senderName",
             fromEmail = senderEmail,
             subject = subject,
-            message = formattedMessage,
-            callback = callback
+            message = formattedMessage
         )
     }
 
@@ -382,9 +377,8 @@ class EmailService(private val context: Context) {
         eventTitle: String,
         eventDate: String,
         eventLocation: String,
-        eventDescription: String,
-        callback: (Boolean, String?) -> Unit
-    ) {
+        eventDescription: String
+    ): Pair<Boolean, String?> {
         Log.d(TAG, "🎉 Sending event invitation...")
         Log.d(TAG, "   Event: $eventTitle")
         Log.d(TAG, "   Organizer: $organizerName")
@@ -409,14 +403,13 @@ class EmailService(private val context: Context) {
             appendLine("You can reply to this email to contact the organizer directly.")
         }
 
-        sendEmail(
+        return sendEmail(
             toEmail = recipientEmail,
             toName = recipientName,
             fromName = "Events - $organizerName",
             fromEmail = organizerEmail,
             subject = subject,
-            message = formattedMessage,
-            callback = callback
+            message = formattedMessage
         )
     }
 
@@ -424,9 +417,8 @@ class EmailService(private val context: Context) {
      * Test EmailJS configuration with detailed diagnostics
      */
     suspend fun testEmailConfiguration(
-        testRecipientEmail: String,
-        callback: (Boolean, String?) -> Unit
-    ) {
+        testRecipientEmail: String
+    ): Pair<Boolean, String?> {
         Log.i(TAG, "🧪 STARTING EMAILJS CONFIGURATION TEST")
         Log.i(TAG, "=".repeat(60))
         Log.i(TAG, "🎯 Test Details:")
@@ -454,27 +446,26 @@ class EmailService(private val context: Context) {
             appendLine("Events App - Email Test")
         }
 
-        sendEmail(
+        val (success, message) = sendEmail(
             toEmail = testRecipientEmail,
             toName = "Test Recipient",
             fromName = "Events App (Test)",
             fromEmail = testRecipientEmail,
             subject = "🧪 EmailJS Configuration Test - Events App",
-            message = testMessage,
-            callback = { success, message ->
-                if (success) {
-                    Log.i(TAG, "✅ EMAILJS TEST SUCCESSFUL!")
-                    Log.i(TAG, "   The configuration is working correctly")
-                    Log.i(TAG, "   Check the recipient's inbox (and spam folder)")
-                } else {
-                    Log.e(TAG, "❌ EMAILJS TEST FAILED!")
-                    Log.e(TAG, "   Error: $message")
-                    Log.e(TAG, "   Check the logs above for detailed error information")
-                }
-                Log.i(TAG, "=".repeat(60))
-                callback(success, message)
-            }
+            message = testMessage
         )
+
+        if (success) {
+            Log.i(TAG, "✅ EMAILJS TEST SUCCESSFUL!")
+            Log.i(TAG, "   The configuration is working correctly")
+            Log.i(TAG, "   Check the recipient's inbox (and spam folder)")
+        } else {
+            Log.e(TAG, "❌ EMAILJS TEST FAILED!")
+            Log.e(TAG, "   Error: $message")
+            Log.e(TAG, "   Check the logs above for detailed error information")
+        }
+        Log.i(TAG, "=".repeat(60))
+        return Pair(success, message)
     }
 
     /**

@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
 
 class CreateEventActivity : AppCompatActivity() {
 
@@ -617,7 +618,6 @@ class CreateEventActivity : AppCompatActivity() {
         Log.d(TAG, "   Event ID: $eventId")
         Log.d(TAG, "   Event Title: $eventTitle")
 
-        // Get current user's name and event details from database for accurate notifications and emails
         database.reference.child("users").child(auth.currentUser?.uid ?: "")
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
@@ -628,14 +628,11 @@ class CreateEventActivity : AppCompatActivity() {
                     Log.d(TAG, "   Name: $currentUserName")
                     Log.d(TAG, "   Email: ${maskEmailForLogging(currentUserEmail)}")
 
-                    // Get event details for email
                     database.reference.child("events").child(eventId)
                         .addListenerForSingleValueEvent(object : ValueEventListener {
                             override fun onDataChange(eventSnapshot: DataSnapshot) {
                                 val eventLocation = eventSnapshot.child("location").getValue(String::class.java) ?: ""
                                 val eventDescription = eventSnapshot.child("description").getValue(String::class.java) ?: ""
-
-                                // Format event date for email
                                 val eventDateFormatted = formatEventDateForEmail(eventSnapshot)
 
                                 Log.d(TAG, "🎉 Event details for email:")
@@ -643,24 +640,21 @@ class CreateEventActivity : AppCompatActivity() {
                                 Log.d(TAG, "   Date: $eventDateFormatted")
                                 Log.d(TAG, "   Description length: ${eventDescription.length}")
 
-                                // Send notifications and emails to each invited user
-                                var emailsAttempted = 0
-                                var emailsSuccessful = 0
-                                var emailsFailed = 0
+                                val emailsAttempted = AtomicInteger(0)
+                                val emailsSuccessful = AtomicInteger(0)
+                                val emailsFailed = AtomicInteger(0)
+                                val totalEmails = invitedUsers.size
 
                                 invitedUsers.values.forEach { invitedUser ->
-                                    emailsAttempted++
-
-                                    Log.d(TAG, "📧 Processing invitation $emailsAttempted/${invitedUsers.size}")
-                                    Log.d(TAG, "   Recipient: ${invitedUser.fullName} (${maskEmailForLogging(invitedUser.email)})")
-
-                                    // Send email invitation with enhanced logging
                                     CoroutineScope(Dispatchers.Main).launch {
+                                        Log.d(TAG, "📧 Processing invitation ${emailsAttempted.incrementAndGet()}/$totalEmails")
+                                        Log.d(TAG, "   Recipient: ${invitedUser.fullName} (${maskEmailForLogging(invitedUser.email)})")
+
                                         if (ENABLE_EMAIL_DEBUG) {
                                             Log.d(TAG, "🚀 Starting email send for ${maskEmailForLogging(invitedUser.email)}")
                                         }
 
-                                        emailService.sendEventInvitation(
+                                        val (emailSuccess, errorMessage) = emailService.sendEventInvitation(
                                             recipientEmail = invitedUser.email,
                                             recipientName = invitedUser.fullName,
                                             organizerName = currentUserName,
@@ -669,67 +663,28 @@ class CreateEventActivity : AppCompatActivity() {
                                             eventDate = eventDateFormatted,
                                             eventLocation = eventLocation,
                                             eventDescription = eventDescription
-                                        ) { emailSuccess, errorMessage ->
+                                        )
 
-                                            if (emailSuccess) {
-                                                emailsSuccessful++
-                                                Log.d(TAG, "✅ Email invitation sent successfully")
-                                                Log.d(TAG, "   To: ${maskEmailForLogging(invitedUser.email)}")
-                                                Log.d(TAG, "   Progress: $emailsSuccessful/$emailsAttempted emails sent")
+                                        if (emailSuccess) {
+                                            emailsSuccessful.incrementAndGet()
+                                            Log.d(TAG, "✅ Email invitation sent successfully")
+                                        } else {
+                                            emailsFailed.incrementAndGet()
+                                            Log.e(TAG, "❌ Email invitation failed: $errorMessage")
+                                        }
 
-                                                // Create notification that mentions email
-                                                createInvitationNotificationWithEmail(
-                                                    invitedUser.userId,
-                                                    currentUserName,
-                                                    eventId,
-                                                    eventTitle,
-                                                    invitedUser.email
-                                                )
+                                        if (emailSuccess) {
+                                            createInvitationNotificationWithEmail(
+                                                invitedUser.userId, currentUserName, eventId, eventTitle, invitedUser.email
+                                            )
+                                        } else {
+                                            createFallbackInvitationNotification(
+                                                invitedUser.userId, currentUserName, eventId, eventTitle
+                                            )
+                                        }
 
-                                            } else {
-                                                emailsFailed++
-                                                Log.e(TAG, "❌ Email invitation failed")
-                                                Log.e(TAG, "   To: ${maskEmailForLogging(invitedUser.email)}")
-                                                Log.e(TAG, "   Error: $errorMessage")
-                                                Log.e(TAG, "   Progress: $emailsFailed failures, $emailsSuccessful successes")
-
-                                                // Create fallback notification
-                                                createFallbackInvitationNotification(
-                                                    invitedUser.userId,
-                                                    currentUserName,
-                                                    eventId,
-                                                    eventTitle
-                                                )
-                                            }
-
-                                            // Log final summary when all emails are processed
-                                            val totalProcessed = emailsSuccessful + emailsFailed
-                                            if (totalProcessed == emailsAttempted) {
-                                                Log.i(TAG, "📊 INVITATION SUMMARY:")
-                                                Log.i(TAG, "   Total invitations: $emailsAttempted")
-                                                Log.i(TAG, "   Emails successful: $emailsSuccessful")
-                                                Log.i(TAG, "   Emails failed: $emailsFailed")
-                                                Log.i(TAG, "   Success rate: ${(emailsSuccessful * 100) / emailsAttempted}%")
-
-                                                // Show user feedback
-                                                when {
-                                                    emailsSuccessful == emailsAttempted -> {
-                                                        Toast.makeText(this@CreateEventActivity,
-                                                            "✅ All $emailsSuccessful invitations sent successfully!",
-                                                            Toast.LENGTH_LONG).show()
-                                                    }
-                                                    emailsSuccessful > 0 -> {
-                                                        Toast.makeText(this@CreateEventActivity,
-                                                            "⚠️ $emailsSuccessful/$emailsAttempted invitations sent (some emails failed)",
-                                                            Toast.LENGTH_LONG).show()
-                                                    }
-                                                    else -> {
-                                                        Toast.makeText(this@CreateEventActivity,
-                                                            "❌ Email invitations failed, but notifications were sent",
-                                                            Toast.LENGTH_LONG).show()
-                                                    }
-                                                }
-                                            }
+                                        if (emailsAttempted.get() == totalEmails) {
+                                            logAndToastEmailSummary(emailsSuccessful.get(), emailsFailed.get(), totalEmails)
                                         }
                                     }
                                 }
@@ -737,7 +692,6 @@ class CreateEventActivity : AppCompatActivity() {
 
                             override fun onCancelled(error: DatabaseError) {
                                 Log.e(TAG, "❌ Failed to get event details for email: ${error.message}")
-                                // Fallback: send basic notifications without email
                                 sendFallbackInvitationNotifications(eventId, eventTitle, currentUserName)
                             }
                         })
@@ -745,12 +699,40 @@ class CreateEventActivity : AppCompatActivity() {
 
                 override fun onCancelled(error: DatabaseError) {
                     Log.e(TAG, "❌ Failed to get organizer details: ${error.message}")
-                    // Use fallback name if database read fails
                     val fallbackName = auth.currentUser?.displayName ?: "Someone"
                     sendFallbackInvitationNotifications(eventId, eventTitle, fallbackName)
                 }
             })
     }
+
+    private fun logAndToastEmailSummary(successful: Int, failed: Int, total: Int) {
+        Log.i(TAG, "📊 INVITATION SUMMARY:")
+        Log.i(TAG, "   Total invitations: $total")
+        Log.i(TAG, "   Emails successful: $successful")
+        Log.i(TAG, "   Emails failed: $failed")
+        Log.i(TAG, "   Success rate: ${if (total > 0) (successful * 100) / total else 0}%")
+
+        runOnUiThread {
+            when {
+                successful == total -> {
+                    Toast.makeText(this@CreateEventActivity,
+                        "✅ All $successful invitations sent successfully!",
+                        Toast.LENGTH_LONG).show()
+                }
+                successful > 0 -> {
+                    Toast.makeText(this@CreateEventActivity,
+                        "⚠️ $successful/$total invitations sent (some emails failed)",
+                        Toast.LENGTH_LONG).show()
+                }
+                else -> {
+                    Toast.makeText(this@CreateEventActivity,
+                        "❌ Email invitations failed, but notifications were sent",
+                        Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
 
     private fun createInvitationNotificationWithEmail(
         userId: String,
@@ -841,7 +823,7 @@ class CreateEventActivity : AppCompatActivity() {
             database.reference.child("users").child(userId).child("invitations").child(eventId).setValue(userInvitation)
 
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error creating fallback invitation notification: ${e.message}", e)
+            Log.e(TAG, "❌ Error creating fallback notification: ${e.message}", e)
         }
     }
 
