@@ -2,7 +2,6 @@ package com.student.events.services
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.*
@@ -12,23 +11,29 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlin.coroutines.resumeWithException
 
 /**
- * Centralized authentication state manager to prevent inconsistent auth states
+ * Centralized authentication state manager that provides reactive authentication state
+ * and prevents inconsistent auth states across the application.
+ *
+ * This singleton manages Firebase authentication, session persistence, and automatic
+ * session recovery to ensure seamless user experience.
  */
 class AuthStateManager private constructor(private val context: Context) {
 
     private val auth = FirebaseAuth.getInstance()
     private val database = FirebaseDatabase.getInstance()
-    private val sessionPrefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val sessionPrefs: SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    // Reactive authentication state observable by UI components
     private val _authState = MutableStateFlow(AuthState.UNKNOWN)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
+    // Current user information observable by UI components
     private val _currentUser = MutableStateFlow<UserInfo?>(null)
     val currentUser: StateFlow<UserInfo?> = _currentUser.asStateFlow()
 
     companion object {
-        private const val TAG = "AuthStateManager"
         private const val PREFS_NAME = "EventsAppSession"
         private const val KEY_USER_LOGGED_IN = "user_logged_in"
         private const val KEY_USER_ID = "user_id"
@@ -40,6 +45,9 @@ class AuthStateManager private constructor(private val context: Context) {
         @Volatile
         private var INSTANCE: AuthStateManager? = null
 
+        /**
+         * Get singleton instance of AuthStateManager
+         */
         fun getInstance(context: Context): AuthStateManager {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: AuthStateManager(context.applicationContext).also { INSTANCE = it }
@@ -48,67 +56,66 @@ class AuthStateManager private constructor(private val context: Context) {
     }
 
     init {
-        // Initialize auth state
         initializeAuthState()
-
-        // Setup Firebase auth listener
         setupAuthListener()
     }
 
+    /**
+     * Initialize authentication state based on Firebase and local session
+     */
     private fun initializeAuthState() {
         scope.launch {
             val firebaseUser = auth.currentUser
             val sessionUserId = sessionPrefs.getString(KEY_USER_ID, null)
             val isSessionValid = sessionPrefs.getBoolean(KEY_USER_LOGGED_IN, false)
 
-            Log.d(TAG, "Initializing auth state - Firebase: ${firebaseUser?.uid}, Session: $sessionUserId")
-
             when {
+                // Both Firebase and session are valid and matching
                 firebaseUser != null && firebaseUser.uid == sessionUserId -> {
-                    // Both valid and matching
                     updateAuthState(AuthState.AUTHENTICATED)
                     loadUserInfo(firebaseUser.uid)
                 }
 
+                // Firebase user exists but session needs updating
                 firebaseUser != null -> {
-                    // Firebase user exists, update session
                     saveSession(firebaseUser.uid, firebaseUser.email)
                     updateAuthState(AuthState.AUTHENTICATED)
                     loadUserInfo(firebaseUser.uid)
                 }
 
+                // Session exists but Firebase user is missing - attempt recovery
                 isSessionValid && !sessionUserId.isNullOrEmpty() -> {
-                    // Session exists but no Firebase user - attempt recovery
                     updateAuthState(AuthState.RECOVERING)
                     attemptSessionRecovery(sessionUserId)
                 }
 
+                // No authentication found
                 else -> {
-                    // No authentication
                     updateAuthState(AuthState.UNAUTHENTICATED)
                 }
             }
         }
     }
 
+    /**
+     * Setup Firebase authentication state listener for real-time auth changes
+     */
     private fun setupAuthListener() {
         auth.addAuthStateListener { firebaseAuth ->
             val user = firebaseAuth.currentUser
 
             scope.launch {
                 when {
+                    // User is authenticated
                     user != null -> {
-                        Log.d(TAG, "Auth state changed - User authenticated: ${user.uid}")
                         updateAuthState(AuthState.AUTHENTICATED)
                         saveSession(user.uid, user.email)
                         loadUserInfo(user.uid)
                     }
 
+                    // User was authenticated but Firebase user is now null
                     _authState.value == AuthState.AUTHENTICATED -> {
-                        // User was authenticated but now Firebase user is null
-                        Log.w(TAG, "Auth state changed - User became null, attempting recovery")
-
-                        // Don't immediately log out - attempt recovery first
+                        // Attempt session recovery before logging out
                         val sessionUserId = sessionPrefs.getString(KEY_USER_ID, null)
                         if (!sessionUserId.isNullOrEmpty()) {
                             updateAuthState(AuthState.RECOVERING)
@@ -118,8 +125,8 @@ class AuthStateManager private constructor(private val context: Context) {
                         }
                     }
 
+                    // User is not authenticated
                     else -> {
-                        Log.d(TAG, "Auth state changed - User not authenticated")
                         updateAuthState(AuthState.UNAUTHENTICATED)
                     }
                 }
@@ -127,17 +134,16 @@ class AuthStateManager private constructor(private val context: Context) {
         }
     }
 
+    /**
+     * Attempt to recover user session when Firebase auth is missing but session exists
+     */
     private suspend fun attemptSessionRecovery(userId: String) {
-        Log.d(TAG, "Attempting session recovery for user: $userId")
-
         try {
-            // Check if user exists in database
+            // Verify user exists in database
             val snapshot = database.reference.child("users").child(userId).get().await()
 
             if (snapshot.exists()) {
-                Log.d(TAG, "✅ User found in database - session is valid")
-
-                // Keep session valid
+                // User found in database - session is valid
                 updateAuthState(AuthState.AUTHENTICATED)
 
                 // Load user info from database
@@ -147,32 +153,34 @@ class AuthStateManager private constructor(private val context: Context) {
 
                 _currentUser.value = UserInfo(userId, email, fullName, profileImageUrl)
 
-                // Try to silently re-authenticate if we have stored credentials
+                // Attempt silent re-authentication if credentials are available
                 attemptSilentReAuthentication(userId, email)
-
             } else {
-                Log.w(TAG, "❌ User not found in database - invalid session")
+                // User not found in database - invalid session
                 clearSession()
                 updateAuthState(AuthState.UNAUTHENTICATED)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to recover session: ${e.message}")
-            // Keep existing state on error - don't log user out
+            // Keep existing state on error to avoid unnecessary logouts
         }
     }
 
+    /**
+     * Attempt silent re-authentication for session recovery
+     */
     private suspend fun attemptSilentReAuthentication(userId: String, email: String) {
-        // In a production app, you might want to:
-        // 1. Use refresh tokens
-        // 2. Implement biometric re-authentication
-        // 3. Use custom authentication tokens
+        // In production, implement secure re-authentication methods:
+        // - Refresh tokens
+        // - Biometric authentication
+        // - Custom authentication tokens
 
-        Log.d(TAG, "Silent re-authentication attempted for: $email")
-
-        // For now, just ensure the session stays valid
+        // For now, ensure session stays valid
         refreshSession()
     }
 
+    /**
+     * Load user information from Firebase database
+     */
     private suspend fun loadUserInfo(userId: String) {
         try {
             val snapshot = database.reference.child("users").child(userId).get().await()
@@ -184,7 +192,7 @@ class AuthStateManager private constructor(private val context: Context) {
 
                 _currentUser.value = UserInfo(userId, email, fullName, profileImageUrl)
 
-                // Update cached user info
+                // Cache user info locally for offline access
                 sessionPrefs.edit().apply {
                     putString(KEY_USER_NAME, fullName)
                     putString(KEY_USER_EMAIL, email)
@@ -192,9 +200,7 @@ class AuthStateManager private constructor(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load user info: ${e.message}")
-
-            // Try to use cached data
+            // Use cached data if database access fails
             val cachedName = sessionPrefs.getString(KEY_USER_NAME, "")
             val cachedEmail = sessionPrefs.getString(KEY_USER_EMAIL, "")
 
@@ -204,6 +210,9 @@ class AuthStateManager private constructor(private val context: Context) {
         }
     }
 
+    /**
+     * Save user session data with device-specific validation
+     */
     fun saveSession(userId: String, email: String?) {
         sessionPrefs.edit().apply {
             putBoolean(KEY_USER_LOGGED_IN, true)
@@ -211,59 +220,65 @@ class AuthStateManager private constructor(private val context: Context) {
             putString(KEY_USER_EMAIL, email ?: "")
             putLong(KEY_LAST_LOGIN_TIME, System.currentTimeMillis())
 
-            // Generate a device-specific token for additional validation
+            // Generate device-specific token for additional security
             val deviceToken = generateDeviceToken(userId)
             putString(KEY_DEVICE_TOKEN, deviceToken)
 
             apply()
         }
 
-        Log.d(TAG, "Session saved for user: $userId")
-
-        // Start authentication service
+        // Start background authentication service
         AuthenticationService.startService(context)
     }
 
+    /**
+     * Refresh session timestamp to maintain active state
+     */
     fun refreshSession() {
         if (_authState.value == AuthState.AUTHENTICATED) {
             sessionPrefs.edit().apply {
                 putLong(KEY_LAST_LOGIN_TIME, System.currentTimeMillis())
                 apply()
             }
-            Log.d(TAG, "Session refreshed")
         }
     }
 
+    /**
+     * Clear all session data and reset user state
+     */
     fun clearSession() {
         sessionPrefs.edit().clear().apply()
         _currentUser.value = null
-        Log.d(TAG, "Session cleared")
-
-        // Stop authentication service
         AuthenticationService.stopService(context)
     }
 
+    /**
+     * Perform complete logout - clear session and Firebase auth
+     */
     fun logout() {
         scope.launch {
             updateAuthState(AuthState.UNAUTHENTICATED)
             clearSession()
 
-            // Sign out from Firebase
             try {
                 auth.signOut()
             } catch (e: Exception) {
-                Log.e(TAG, "Error signing out: ${e.message}")
+                // Continue with logout even if Firebase signout fails
             }
         }
     }
 
+    /**
+     * Update authentication state and notify observers
+     */
     private fun updateAuthState(newState: AuthState) {
-        Log.d(TAG, "Auth state updated: ${_authState.value} -> $newState")
         _authState.value = newState
     }
 
+    /**
+     * Generate unique device token for session validation
+     */
     private fun generateDeviceToken(userId: String): String {
-        // Generate a unique token based on user ID and device info
         val deviceId = android.provider.Settings.Secure.getString(
             context.contentResolver,
             android.provider.Settings.Secure.ANDROID_ID
@@ -271,6 +286,9 @@ class AuthStateManager private constructor(private val context: Context) {
         return "$userId-$deviceId-${System.currentTimeMillis()}".hashCode().toString()
     }
 
+    /**
+     * Validate current session integrity and freshness
+     */
     fun validateSession(): Boolean {
         val isLoggedIn = sessionPrefs.getBoolean(KEY_USER_LOGGED_IN, false)
         val userId = sessionPrefs.getString(KEY_USER_ID, null)
@@ -280,26 +298,27 @@ class AuthStateManager private constructor(private val context: Context) {
         val currentTime = System.currentTimeMillis()
         val timeSinceLogin = currentTime - lastLoginTime
 
-        // Session is valid if:
-        // 1. User is marked as logged in
-        // 2. User ID exists
-        // 3. Last login was within 30 days
-        // 4. Device token exists (for this device)
-        val isValid = isLoggedIn &&
+        // Session is valid if all conditions are met:
+        // - User is marked as logged in
+        // - User ID exists
+        // - Last login was within 30 days
+        // - Device token exists (device-specific validation)
+        return isLoggedIn &&
                 !userId.isNullOrEmpty() &&
                 timeSinceLogin < 30L * 24 * 60 * 60 * 1000 &&
                 !deviceToken.isNullOrEmpty()
-
-        Log.d(TAG, "Session validation: $isValid (Time since login: ${timeSinceLogin / 1000 / 60}min)")
-
-        return isValid
     }
 
+    /**
+     * Clean up resources when manager is no longer needed
+     */
     fun onDestroy() {
         scope.cancel()
     }
 
-    // Data classes
+    /**
+     * User information data class
+     */
     data class UserInfo(
         val uid: String,
         val email: String,
@@ -307,20 +326,26 @@ class AuthStateManager private constructor(private val context: Context) {
         val profileImageUrl: String?
     )
 
+    /**
+     * Authentication state enumeration
+     */
     enum class AuthState {
-        UNKNOWN,          // Initial state
-        AUTHENTICATED,    // User is authenticated
+        UNKNOWN,          // Initial state while determining auth status
+        AUTHENTICATED,    // User is authenticated and session is valid
         UNAUTHENTICATED, // User is not authenticated
-        RECOVERING       // Attempting to recover session
+        RECOVERING       // Attempting to recover existing session
     }
 }
 
-// Extension function for Tasks
-private suspend fun <T> com.google.android.gms.tasks.Task<T>.await(): T = suspendCancellableCoroutine { cont ->
-    addOnSuccessListener { result ->
-        cont.resume(result, null)
+/**
+ * Extension function to convert Firebase Task to Kotlin Coroutine
+ */
+private suspend fun <T> com.google.android.gms.tasks.Task<T>.await(): T =
+    suspendCancellableCoroutine { cont ->
+        addOnSuccessListener { result ->
+            cont.resume(result, null)
+        }
+        addOnFailureListener { exception ->
+            cont.resumeWithException(exception)
+        }
     }
-    addOnFailureListener { exception ->
-        cont.resumeWithException(exception)
-    }
-}

@@ -20,21 +20,29 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 
+/**
+ * Activity for handling password reset functionality.
+ * Provides a secure interface for users to request password reset emails.
+ * Implements security best practices to prevent email enumeration attacks
+ * by showing success state regardless of whether the email exists in the system.
+ */
 class ForgotPasswordActivity : AppCompatActivity() {
 
-    // Firebase Auth instance
+    // Firebase Authentication service
     private lateinit var auth: FirebaseAuth
 
-    // UI elements
+    // Form UI components
     private lateinit var emailEditText: TextInputEditText
     private lateinit var emailInputLayout: TextInputLayout
     private lateinit var sendLinkButton: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var backToLoginTextView: LinearLayout
+
+    // Success state UI components
     private lateinit var backToLoginButton: Button
     private lateinit var successMessageTextView: TextView
 
-    // View groups for showing/hiding states
+    // View groups for state management
     private lateinit var formGroup: Group
     private lateinit var successGroup: Group
 
@@ -42,173 +50,232 @@ class ForgotPasswordActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_forgot_password)
 
-        // Enable edge-to-edge display
+        configureSystemUI()
+        initializeFirebase()
+        initializeViews()
+        setupUserInteractions()
+        setupKeyboardBehavior()
+    }
+
+    /**
+     * Configure system UI for modern edge-to-edge display
+     */
+    private fun configureSystemUI() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // Configure system bar appearance
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = true
         insetsController.isAppearanceLightNavigationBars = true
-
-        // Initialize Firebase Auth
-        auth = Firebase.auth
-
-        // Initialize UI elements
-        initializeViews()
-
-        // Set up click listeners
-        setupClickListeners()
-
-        // Set up keyboard handling
-        setupKeyboardHandling()
     }
 
+    /**
+     * Initialize Firebase authentication service
+     */
+    private fun initializeFirebase() {
+        auth = Firebase.auth
+    }
+
+    /**
+     * Initialize all UI components and configure input types
+     */
     private fun initializeViews() {
-        // Form elements
+        // Form state components
         emailEditText = findViewById(R.id.emailEditText)
         emailInputLayout = findViewById(R.id.emailInputLayout)
         sendLinkButton = findViewById(R.id.sendLinkButton)
         progressBar = findViewById(R.id.progressBar)
         backToLoginTextView = findViewById(R.id.backToLoginTextView)
 
-        // Success state elements
+        // Success state components
         backToLoginButton = findViewById(R.id.backToLoginButton)
         successMessageTextView = findViewById(R.id.successMessageTextView)
 
-        // View groups
+        // State management groups
         formGroup = findViewById(R.id.formGroup)
         successGroup = findViewById(R.id.successGroup)
 
+        // Configure email input for optimal user experience
         emailEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
     }
 
-    private fun setupClickListeners() {
-        // Send reset link button
+    /**
+     * Setup click listeners for user interactions
+     */
+    private fun setupUserInteractions() {
         sendLinkButton.setOnClickListener {
-            sendPasswordResetEmail()
+            initiatePasswordReset()
         }
 
-        // Back to login link (form state)
         backToLoginTextView.setOnClickListener {
             navigateToLogin()
         }
 
-        // Back to login button (success state)
         backToLoginButton.setOnClickListener {
             navigateToLogin()
         }
     }
 
-    private fun setupKeyboardHandling() {
-        // Show keyboard when email field gets focus
+    /**
+     * Configure keyboard behavior and input handling
+     */
+    private fun setupKeyboardBehavior() {
+        // Auto-show keyboard when email field gains focus
         emailEditText.onFocusChangeListener = View.OnFocusChangeListener { view, hasFocus ->
             if (hasFocus) {
                 showKeyboard(view)
             }
         }
 
-        // Handle Enter key press
+        // Handle Enter key press to submit form
         emailEditText.setOnEditorActionListener { _, _, _ ->
-            sendPasswordResetEmail()
+            initiatePasswordReset()
             true
         }
     }
 
-    private fun sendPasswordResetEmail() {
+    /**
+     * Initiate password reset process with comprehensive validation
+     */
+    private fun initiatePasswordReset() {
         val email = emailEditText.text.toString().trim()
 
-        // Clear any previous errors
+        // Clear any previous error states
         emailInputLayout.error = null
 
-        // Validate email
-        if (email.isEmpty()) {
-            emailInputLayout.error = getString(R.string.email_required)
-            emailEditText.requestFocus()
+        // Validate email input
+        if (!validateEmailInput(email)) {
             return
         }
 
-        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            emailInputLayout.error = getString(R.string.invalid_email)
-            emailEditText.requestFocus()
-            return
-        }
-
-        // Hide keyboard
+        // Hide keyboard and show loading state
         hideKeyboard()
+        setLoadingState(true)
 
-        // Show loading state
-        showLoadingState(true)
+        // Send password reset email using Firebase Auth
+        sendPasswordResetEmail(email)
+    }
 
-        // Send password reset email directly without checking if email exists
-        // This is the recommended approach by Firebase for security reasons
+    /**
+     * Validate email input and show appropriate error messages
+     * @param email The email address to validate
+     * @return true if email is valid, false otherwise
+     */
+    private fun validateEmailInput(email: String): Boolean {
+        when {
+            email.isEmpty() -> {
+                emailInputLayout.error = getString(R.string.email_required)
+                emailEditText.requestFocus()
+                return false
+            }
+            !Patterns.EMAIL_ADDRESS.matcher(email).matches() -> {
+                emailInputLayout.error = getString(R.string.invalid_email)
+                emailEditText.requestFocus()
+                return false
+            }
+        }
+        return true
+    }
+
+    /**
+     * Send password reset email through Firebase Auth
+     * Implements security best practice by showing success regardless of email existence
+     * @param email The email address to send reset link to
+     */
+    private fun sendPasswordResetEmail(email: String) {
         auth.sendPasswordResetEmail(email)
             .addOnCompleteListener { task ->
-                showLoadingState(false)
+                setLoadingState(false)
 
                 if (task.isSuccessful) {
-                    // Always show success state, regardless of whether email exists
-                    // Firebase won't send emails to non-existent accounts, but user doesn't know this
-                    // This prevents email enumeration attacks
+                    // Show success state for security reasons (prevents email enumeration)
+                    // Firebase won't actually send emails to non-existent accounts
                     showSuccessState(email)
                 } else {
-                    // Show error message only for technical issues (network, rate limiting, etc.)
-                    val errorMessage = when {
-                        task.exception?.message?.contains("network") == true ||
-                                task.exception?.message?.contains("NETWORK_ERROR") == true ->
-                            getString(R.string.network_error)
-
-                        task.exception?.message?.contains("too-many-requests") == true ||
-                                task.exception?.message?.contains("TOO_MANY_ATTEMPTS_TRY_LATER") == true ->
-                            getString(R.string.too_many_requests)
-
-                        task.exception?.message?.contains("invalid-email") == true ->
-                            getString(R.string.invalid_email)
-
-                        else -> getString(R.string.reset_email_failed)
-                    }
-
-                    emailInputLayout.error = errorMessage
-                    emailEditText.requestFocus()
+                    // Handle technical errors (network issues, rate limiting, etc.)
+                    handlePasswordResetError(task.exception)
                 }
             }
     }
 
-    private fun showLoadingState(isLoading: Boolean) {
+    /**
+     * Handle password reset errors with user-friendly messages
+     * @param exception The exception from Firebase Auth
+     */
+    private fun handlePasswordResetError(exception: Exception?) {
+        val errorMessage = when {
+            exception?.message?.contains("network", ignoreCase = true) == true ||
+                    exception?.message?.contains("NETWORK_ERROR", ignoreCase = true) == true ->
+                getString(R.string.network_error)
+
+            exception?.message?.contains("too-many-requests", ignoreCase = true) == true ||
+                    exception?.message?.contains("TOO_MANY_ATTEMPTS_TRY_LATER", ignoreCase = true) == true ->
+                getString(R.string.too_many_requests)
+
+            exception?.message?.contains("invalid-email", ignoreCase = true) == true ->
+                getString(R.string.invalid_email)
+
+            else -> getString(R.string.reset_email_failed)
+        }
+
+        emailInputLayout.error = errorMessage
+        emailEditText.requestFocus()
+    }
+
+    /**
+     * Control loading state of the form
+     * @param isLoading true to show loading state, false to hide
+     */
+    private fun setLoadingState(isLoading: Boolean) {
         progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
         sendLinkButton.isEnabled = !isLoading
         emailEditText.isEnabled = !isLoading
     }
 
+    /**
+     * Show success state with personalized message
+     * @param email The email address the reset link was sent to
+     */
     private fun showSuccessState(email: String) {
-        // Update success message with the email
+        // Update success message with the provided email
         successMessageTextView.text = getString(R.string.password_reset_sent, email)
 
-        // Hide form and show success state
+        // Transition from form state to success state
         formGroup.visibility = View.GONE
         successGroup.visibility = View.VISIBLE
     }
 
+    /**
+     * Show soft keyboard for the specified view
+     * @param view The view to show keyboard for
+     */
     private fun showKeyboard(view: View) {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
     }
 
+    /**
+     * Hide soft keyboard
+     */
     private fun hideKeyboard() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.hideSoftInputFromWindow(currentFocus?.windowToken, 0)
     }
 
+    /**
+     * Navigate back to login activity and clear this activity from back stack
+     */
     private fun navigateToLogin() {
-        // Use FLAG_CLEAR_TOP to remove this activity from the back stack
         val intent = Intent(this, LoginActivity::class.java)
         intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
         startActivity(intent)
         finish()
     }
 
+    /**
+     * Handle back button press to navigate to login
+     */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        // Navigate back to login when back button is pressed
         super.onBackPressed()
         navigateToLogin()
     }

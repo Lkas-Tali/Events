@@ -11,7 +11,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.text.InputType
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -43,7 +42,10 @@ import com.student.events.models.Event
 import java.text.SimpleDateFormat
 import java.util.*
 
-
+/**
+ * Profile Activity displays user's profile information and their events.
+ * Users can view and edit their profile, change password, and manage their events.
+ */
 class ProfileActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityProfileBinding
@@ -53,14 +55,15 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var database: FirebaseDatabase
     private lateinit var storage: FirebaseStorage
 
+    // Event lists for organizing user's events
     private val upcomingEvents = mutableListOf<Event>()
     private val pastEvents = mutableListOf<Event>()
 
     private var currentUserId: String? = null
     private var currentUser: FirebaseUser? = null
-
     private var selectedImageUri: Uri? = null
 
+    // Firebase listeners for real-time updates
     private var userProfileListener: ValueEventListener? = null
     private var userProfileRef: DatabaseReference? = null
     private var userEventsListener: ValueEventListener? = null
@@ -74,6 +77,9 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Activity result launcher for image selection from device gallery
+     */
     private val imagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -88,41 +94,43 @@ class ProfileActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Configure edge-to-edge display
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = true
         insetsController.isAppearanceLightNavigationBars = true
 
         try {
+            // Initialize Firebase services
             auth = FirebaseAuth.getInstance()
             database = FirebaseDatabase.getInstance()
             storage = FirebaseStorage.getInstance()
+
             currentUser = auth.currentUser
             currentUserId = currentUser?.uid
 
+            // Ensure user is authenticated
             if (currentUserId == null) {
-                Log.e(TAG, "No current user found")
                 finish()
                 return
             }
 
             binding = DataBindingUtil.setContentView(this, R.layout.activity_profile)
 
-            Log.d(TAG, "ProfileActivity created successfully")
-
-            applySystemBarInsets()
-            setupViews()
-            setupRecyclerViews()
+            setupUserInterface()
+            setupEventDisplays()
             setupSwipeRefresh()
-            setupRealTimeListeners()
+            setupDataListeners()
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error in onCreate: ${e.message}", e)
+            Toast.makeText(this, "Error loading profile", Toast.LENGTH_SHORT).show()
             finish()
         }
     }
 
+    /**
+     * Configure system bars and window insets for modern Android UI
+     */
     private fun applySystemBarInsets() {
         val header = findViewById<View>(R.id.headerLayout)
         ViewCompat.setOnApplyWindowInsetsListener(header) { view, windowInsets ->
@@ -138,6 +146,9 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Configure pull-to-refresh functionality
+     */
     private fun setupSwipeRefresh() {
         binding.swipeRefreshLayout.setColorSchemeResources(
             R.color.app_primary_blue,
@@ -147,70 +158,57 @@ class ProfileActivity : AppCompatActivity() {
 
         binding.swipeRefreshLayout.setOnRefreshListener {
             binding.swipeRefreshLayout.isRefreshing = true
+            // Auto-dismiss refresh indicator after brief delay
             binding.swipeRefreshLayout.postDelayed({
                 binding.swipeRefreshLayout.isRefreshing = false
             }, 1000)
         }
     }
 
-    private fun setupViews() {
+    /**
+     * Setup main UI components and click listeners
+     */
+    private fun setupUserInterface() {
+        applySystemBarInsets()
+
         try {
-            binding.backButton.setOnClickListener {
-                finish()
-            }
-            binding.editProfileButton.setOnClickListener {
-                showEditProfileDialog()
-            }
-            binding.changePasswordButton.setOnClickListener {
-                showChangePasswordDialog()
-            }
-            binding.profileImageView.setOnClickListener {
-                showEditProfileDialog()
-            }
+            binding.backButton.setOnClickListener { finish() }
+            binding.editProfileButton.setOnClickListener { showEditProfileDialog() }
+            binding.changePasswordButton.setOnClickListener { showChangePasswordDialog() }
+            binding.profileImageView.setOnClickListener { showEditProfileDialog() }
         } catch (e: Exception) {
-            Log.e(TAG, "Error setting up views: ${e.message}", e)
+            // Fallback for any UI setup errors
         }
     }
 
-    private fun setupRecyclerViews() {
+    /**
+     * Initialize RecyclerViews for displaying user's events
+     */
+    private fun setupEventDisplays() {
         try {
+            // Configure adapter for upcoming events
             upcomingEventsAdapter = EventsAdapter(
                 events = emptyList(),
                 currentUserId = currentUserId ?: "",
-                onEventClick = { event -> showCustomEventDetails(event) },
-                onEditClick = { event ->
-                    val intent = Intent(this, CreateEventActivity::class.java).apply {
-                        putExtra("editMode", true)
-                        putExtra("eventId", event.id)
-                        putExtra("eventTitle", event.title)
-                        event.dateTime?.seconds?.let { seconds ->
-                            val date = Date(seconds * 1000)
-                            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                            val timeFormat = SimpleDateFormat("HH:mm", Locale.US)
-                            putExtra("eventDate", dateFormat.format(date))
-                            putExtra("eventTime", timeFormat.format(date))
-                        }
-                        putExtra("eventLocation", event.location)
-                        putExtra("eventDescription", event.description)
-                        putExtra("eventImage", event.imageUrl)
-                    }
-                    startActivity(intent)
-                },
+                onEventClick = { event -> showEventDetails(event) },
+                onEditClick = { event -> navigateToEventEditor(event) },
                 onCancelClick = { event -> showCancelEventDialog(event) },
                 onRsvpClick = { event -> handleRsvp(event) },
                 onCancelRsvpClick = { event -> showCancelRsvpDialog(event) }
             )
 
+            // Configure adapter for past events (read-only)
             pastEventsAdapter = EventsAdapter(
                 events = emptyList(),
                 currentUserId = currentUserId ?: "",
-                onEventClick = { event -> showCustomEventDetails(event) },
-                onEditClick = { /* No edit for past events */ },
-                onCancelClick = { /* No cancel for past events */ },
-                onRsvpClick = { /* No RSVP for past events */ },
-                onCancelRsvpClick = { /* No cancel RSVP for past events */ }
+                onEventClick = { event -> showEventDetails(event) },
+                onEditClick = { /* Past events cannot be edited */ },
+                onCancelClick = { /* Past events cannot be cancelled */ },
+                onRsvpClick = { /* Cannot RSVP to past events */ },
+                onCancelRsvpClick = { /* Cannot cancel RSVP for past events */ }
             )
 
+            // Setup RecyclerViews with optimizations for nested scrolling
             binding.upcomingEventsRecyclerView.apply {
                 layoutManager = LinearLayoutManager(this@ProfileActivity)
                 adapter = upcomingEventsAdapter
@@ -228,19 +226,27 @@ class ProfileActivity : AppCompatActivity() {
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error setting up RecyclerViews: ${e.message}", e)
+            // Handle any RecyclerView setup errors gracefully
         }
     }
 
-    private fun setupRealTimeListeners() {
+    /**
+     * Initialize real-time Firebase listeners for user data and events
+     */
+    private fun setupDataListeners() {
         loadUserProfile()
         loadUserEvents()
     }
 
+    /**
+     * Setup real-time listener for user profile data
+     */
     private fun loadUserProfile() {
         try {
             currentUserId?.let { uid ->
+                // Clean up existing listener
                 userProfileListener?.let { userProfileRef?.removeEventListener(it) }
+
                 userProfileRef = database.reference.child("users").child(uid)
                 userProfileListener = object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
@@ -250,6 +256,7 @@ class ProfileActivity : AppCompatActivity() {
                             val about = snapshot.child("about").getValue(String::class.java)
                             val profileImageUrl = snapshot.child("profileImageUrl").getValue(String::class.java)
 
+                            // Update UI with user data
                             binding.apply {
                                 profileNameText.text = fullName ?: "User"
                                 profileEmailText.text = email ?: ""
@@ -257,12 +264,12 @@ class ProfileActivity : AppCompatActivity() {
                             }
                             loadProfileImage(profileImageUrl)
                         } catch (e: Exception) {
-                            Log.e(TAG, "Error processing user profile data: ${e.message}", e)
+                            // Handle data parsing errors gracefully
                         }
                     }
 
                     override fun onCancelled(error: DatabaseError) {
-                        Log.e(TAG, "Failed to load user profile: ${error.message}")
+                        // Fallback to basic user info on error
                         binding.apply {
                             profileNameText.text = currentUser?.displayName ?: "User"
                             profileEmailText.text = currentUser?.email ?: ""
@@ -274,10 +281,13 @@ class ProfileActivity : AppCompatActivity() {
                 userProfileRef?.addValueEventListener(userProfileListener!!)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading user profile: ${e.message}", e)
+            // Handle listener setup errors
         }
     }
 
+    /**
+     * Load and display user's profile image
+     */
     private fun loadProfileImage(profileImageUrl: String?) {
         if (!profileImageUrl.isNullOrEmpty()) {
             Glide.with(this)
@@ -291,10 +301,15 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Setup real-time listener for user's events
+     */
     private fun loadUserEvents() {
         try {
             currentUserId?.let { uid ->
+                // Clean up existing listener
                 userEventsListener?.let { userEventsRef?.removeEventListener(it) }
+
                 userEventsRef = database.reference.child("events")
                 userEventsListener = object : ValueEventListener {
                     override fun onDataChange(eventsSnapshot: DataSnapshot) {
@@ -303,12 +318,15 @@ class ProfileActivity : AppCompatActivity() {
                             pastEvents.clear()
                             val currentTime = System.currentTimeMillis() / 1000
 
+                            // Process each event and categorize by time
                             for (eventSnapshot in eventsSnapshot.children) {
                                 try {
                                     val event = parseEventFromSnapshot(eventSnapshot, eventSnapshot.key ?: continue)
                                     if (event != null) {
                                         val isOrganizer = event.organizer?.uid == uid
                                         val isAttendee = event.attendees.containsKey(uid)
+
+                                        // Only include events user is involved with
                                         if (isOrganizer || isAttendee) {
                                             if ((event.dateTime?.seconds ?: Long.MAX_VALUE) > currentTime) {
                                                 upcomingEvents.add(event)
@@ -318,33 +336,38 @@ class ProfileActivity : AppCompatActivity() {
                                         }
                                     }
                                 } catch (e: Exception) {
-                                    Log.e(TAG, "Error parsing event ${eventSnapshot.key}: ${e.message}", e)
+                                    // Skip problematic events and continue processing
+                                    continue
                                 }
                             }
+
+                            // Sort events chronologically
                             upcomingEvents.sortBy { it.dateTime?.seconds ?: 0 }
                             pastEvents.sortByDescending { it.dateTime?.seconds ?: 0 }
+
                             updateEventsList()
                             updateTotalEventsCount()
                         } catch (e: Exception) {
-                            Log.e(TAG, "Error processing events data: ${e.message}", e)
+                            // Handle events processing errors
                         } finally {
                             binding.swipeRefreshLayout.isRefreshing = false
                         }
                     }
 
                     override fun onCancelled(error: DatabaseError) {
-                        Log.e(TAG, "Failed to load events: ${error.code} - ${error.message}")
                         binding.swipeRefreshLayout.isRefreshing = false
                     }
                 }
                 userEventsRef?.addValueEventListener(userEventsListener!!)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading user events: ${e.message}", e)
             binding.swipeRefreshLayout.isRefreshing = false
         }
     }
 
+    /**
+     * Parse event data from Firebase snapshot into Event object
+     */
     private fun parseEventFromSnapshot(snapshot: DataSnapshot, eventId: String): Event? {
         return try {
             val title = snapshot.child("title").getValue(String::class.java) ?: ""
@@ -354,6 +377,7 @@ class ProfileActivity : AppCompatActivity() {
             val imageUrl = snapshot.child("imageUrl").getValue(String::class.java)
             val attendeesCount = snapshot.child("attendeesCount").getValue(Int::class.java) ?: 0
 
+            // Parse organizer information
             val organizerSnapshot = snapshot.child("organizer")
             val organizer = if (organizerSnapshot.exists()) {
                 com.student.events.models.Organizer(
@@ -364,6 +388,7 @@ class ProfileActivity : AppCompatActivity() {
 
             val dateTime = parseDateTime(snapshot)
 
+            // Parse attendees map
             val attendeesMap = mutableMapOf<String, com.student.events.models.Attendee>()
             val attendeesSnapshot = snapshot.child("attendees")
             for (attendeeSnapshot in attendeesSnapshot.children) {
@@ -388,15 +413,18 @@ class ProfileActivity : AppCompatActivity() {
                 imageUrl = imageUrl
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error manually parsing event: ${e.message}", e)
             null
         }
     }
 
+    /**
+     * Parse datetime information from Firebase snapshot
+     */
     private fun parseDateTime(snapshot: DataSnapshot): com.student.events.models.DateTime? {
         return try {
             val dateTimeSnapshot = snapshot.child("dateTime")
             if (dateTimeSnapshot.exists()) {
+                // Handle both Firebase timestamp formats
                 val seconds = dateTimeSnapshot.child("_seconds").getValue(Long::class.java)
                     ?: dateTimeSnapshot.child("seconds").getValue(Long::class.java)
                     ?: 0L
@@ -405,6 +433,7 @@ class ProfileActivity : AppCompatActivity() {
                     ?: 0L
                 com.student.events.models.DateTime(seconds = seconds, nanoseconds = nanoseconds)
             } else {
+                // Fallback to legacy date/time format
                 val dateString = snapshot.child("date").getValue(String::class.java)
                 val timeString = snapshot.child("time").getValue(String::class.java)
                 if (!dateString.isNullOrEmpty() && !timeString.isNullOrEmpty()) {
@@ -419,11 +448,13 @@ class ProfileActivity : AppCompatActivity() {
                 } else null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing dateTime: ${e.message}", e)
             null
         }
     }
 
+    /**
+     * Update RecyclerViews with current event data and manage empty states
+     */
     private fun updateEventsList() {
         try {
             upcomingEventsAdapter.updateEvents(upcomingEvents.toList())
@@ -433,18 +464,26 @@ class ProfileActivity : AppCompatActivity() {
             binding.pastEmptyState.visibility = if (pastEvents.isEmpty()) View.VISIBLE else View.GONE
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error updating events list: ${e.message}", e)
+            // Handle adapter update errors gracefully
         }
     }
 
+    /**
+     * Update the total events counter in the UI
+     */
     private fun updateTotalEventsCount() {
         val totalEvents = upcomingEvents.size + pastEvents.size
         binding.totalEventsText.text = "$totalEvents Total Events"
     }
 
+    /**
+     * Display edit profile dialog with current user information
+     */
     private fun showEditProfileDialog() {
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_edit_profile, null)
         val dialog = MaterialAlertDialogBuilder(this).setView(dialogView).create()
+
+        // Get dialog UI elements
         val fullNameEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.fullNameEditText)
         val aboutEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.aboutEditText)
         val profileImagePreview = dialogView.findViewById<ImageView>(R.id.profileImagePreview)
@@ -454,12 +493,15 @@ class ProfileActivity : AppCompatActivity() {
         val closeButton = dialogView.findViewById<ImageView>(R.id.closeButton)
         val progressBar = dialogView.findViewById<View>(R.id.progressBar)
 
+        // Pre-populate form with current data
         fullNameEditText.setText(binding.profileNameText.text.toString())
         aboutEditText.setText(binding.profileAboutText.text.toString())
 
+        // Configure input types for better UX
         fullNameEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
         aboutEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
 
+        // Load current profile image
         if (selectedImageUri != null) {
             Glide.with(this).load(selectedImageUri).circleCrop().into(profileImagePreview)
         } else {
@@ -469,7 +511,8 @@ class ProfileActivity : AppCompatActivity() {
                         override fun onDataChange(snapshot: DataSnapshot) {
                             val imageUrl = snapshot.getValue(String::class.java)
                             if (!imageUrl.isNullOrEmpty()) {
-                                Glide.with(this@ProfileActivity).load(imageUrl).placeholder(R.drawable.ic_person).circleCrop().into(profileImagePreview)
+                                Glide.with(this@ProfileActivity).load(imageUrl)
+                                    .placeholder(R.drawable.ic_person).circleCrop().into(profileImagePreview)
                             }
                         }
                         override fun onCancelled(error: DatabaseError) {}
@@ -477,6 +520,7 @@ class ProfileActivity : AppCompatActivity() {
             }
         }
 
+        // Setup button listeners
         changeImageButton.setOnClickListener {
             openImagePicker()
             dialog.dismiss()
@@ -485,16 +529,19 @@ class ProfileActivity : AppCompatActivity() {
         saveButton.setOnClickListener {
             val newName = fullNameEditText.text.toString().trim()
             val newAbout = aboutEditText.text.toString().trim()
+
             if (newName.isEmpty()) {
                 fullNameEditText.error = "Name cannot be empty"
                 return@setOnClickListener
             }
+
             progressBar.visibility = View.VISIBLE
             saveButton.isEnabled = false
-            saveProfileChanges(newName, newAbout, selectedImageUri) {
+
+            saveProfileChanges(newName, newAbout, selectedImageUri) { success ->
                 progressBar.visibility = View.GONE
                 saveButton.isEnabled = true
-                if (it) {
+                if (success) {
                     dialog.dismiss()
                     selectedImageUri = null
                     Toast.makeText(this, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
@@ -508,21 +555,30 @@ class ProfileActivity : AppCompatActivity() {
             selectedImageUri = null
             dialog.dismiss()
         }
+
         closeButton.setOnClickListener {
             selectedImageUri = null
             dialog.dismiss()
         }
+
         dialog.show()
     }
 
+    /**
+     * Launch device gallery for image selection
+     */
     private fun openImagePicker() {
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         imagePickerLauncher.launch(intent)
     }
 
+    /**
+     * Save user profile changes to Firebase
+     */
     private fun saveProfileChanges(name: String, about: String, imageUri: Uri?, callback: (Boolean) -> Unit) {
         currentUserId?.let { uid ->
             if (imageUri != null) {
+                // Upload new image first, then update profile data
                 uploadProfileImage(imageUri) { imageUrl ->
                     if (imageUrl != null) {
                         updateUserData(uid, name, about, imageUrl, callback)
@@ -531,11 +587,15 @@ class ProfileActivity : AppCompatActivity() {
                     }
                 }
             } else {
+                // Update profile data without changing image
                 updateUserData(uid, name, about, null, callback)
             }
         } ?: callback(false)
     }
 
+    /**
+     * Upload profile image to Firebase Storage
+     */
     private fun uploadProfileImage(imageUri: Uri, callback: (String?) -> Unit) {
         val imageRef = storage.reference.child("profile_images/${currentUserId}_${System.currentTimeMillis()}.jpg")
         imageRef.putFile(imageUri)
@@ -543,32 +603,36 @@ class ProfileActivity : AppCompatActivity() {
                 imageRef.downloadUrl.addOnSuccessListener { downloadUri ->
                     callback(downloadUri.toString())
                 }.addOnFailureListener {
-                    Log.e(TAG, "Failed to get download URL: ${it.message}")
                     callback(null)
                 }
             }
             .addOnFailureListener {
-                Log.e(TAG, "Failed to upload image: ${it.message}")
                 callback(null)
             }
     }
 
+    /**
+     * Update user data in Firebase Database
+     */
     private fun updateUserData(uid: String, name: String, about: String, imageUrl: String?, callback: (Boolean) -> Unit) {
         val updates = mutableMapOf<String, Any>("fullName" to name, "about" to about)
         if (imageUrl != null) {
             updates["profileImageUrl"] = imageUrl
         }
+
         database.reference.child("users").child(uid).updateChildren(updates)
             .addOnSuccessListener { callback(true) }
-            .addOnFailureListener {
-                Log.e(TAG, "Failed to update profile: ${it.message}")
-                callback(false)
-            }
+            .addOnFailureListener { callback(false) }
     }
 
+    /**
+     * Display password change dialog with security validation
+     */
     private fun showChangePasswordDialog() {
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_change_password, null)
         val dialog = MaterialAlertDialogBuilder(this).setView(dialogView).create()
+
+        // Get dialog UI elements
         val currentPasswordEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.currentPasswordEditText)
         val newPasswordEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.newPasswordEditText)
         val confirmPasswordEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.confirmPasswordEditText)
@@ -577,15 +641,17 @@ class ProfileActivity : AppCompatActivity() {
         val closeButton = dialogView.findViewById<ImageView>(R.id.closeButton)
         val progressBar = dialogView.findViewById<View>(R.id.progressBar)
 
+        // Configure secure password input
         currentPasswordEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         newPasswordEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         confirmPasswordEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-
 
         changePasswordButton.setOnClickListener {
             val currentPassword = currentPasswordEditText.text.toString()
             val newPassword = newPasswordEditText.text.toString()
             val confirmPassword = confirmPasswordEditText.text.toString()
+
+            // Validate form inputs
             if (currentPassword.isEmpty()) {
                 currentPasswordEditText.error = "Current password is required"
                 return@setOnClickListener
@@ -598,8 +664,10 @@ class ProfileActivity : AppCompatActivity() {
                 confirmPasswordEditText.error = "Passwords do not match"
                 return@setOnClickListener
             }
+
             progressBar.visibility = View.VISIBLE
             changePasswordButton.isEnabled = false
+
             changePassword(currentPassword, newPassword) { success ->
                 progressBar.visibility = View.GONE
                 changePasswordButton.isEnabled = true
@@ -611,45 +679,49 @@ class ProfileActivity : AppCompatActivity() {
                 }
             }
         }
+
         cancelButton.setOnClickListener { dialog.dismiss() }
         closeButton.setOnClickListener { dialog.dismiss() }
         dialog.show()
     }
 
+    /**
+     * Change user password with Firebase re-authentication
+     */
     private fun changePassword(currentPassword: String, newPassword: String, callback: (Boolean) -> Unit) {
         currentUser?.let { user ->
             val email = user.email
             if (email != null) {
+                // Re-authenticate user before password change for security
                 val credential = EmailAuthProvider.getCredential(email, currentPassword)
                 user.reauthenticate(credential)
                     .addOnSuccessListener {
                         user.updatePassword(newPassword)
                             .addOnSuccessListener { callback(true) }
-                            .addOnFailureListener {
-                                Log.e(TAG, "Failed to update password: ${it.message}")
-                                callback(false)
-                            }
+                            .addOnFailureListener { callback(false) }
                     }
-                    .addOnFailureListener {
-                        Log.e(TAG, "Re-authentication failed: ${it.message}")
-                        callback(false)
-                    }
+                    .addOnFailureListener { callback(false) }
             } else {
                 callback(false)
             }
         } ?: callback(false)
     }
 
+    /**
+     * Handle RSVP to an event
+     */
     private fun handleRsvp(event: Event) {
         currentUserId?.let { uid ->
             database.reference.child("users").child(uid).get().addOnSuccessListener { userSnapshot ->
                 val fullName = userSnapshot.child("fullName").getValue(String::class.java) ?: "A User"
                 val profileImageUrl = userSnapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
+
                 val updates = hashMapOf<String, Any>(
                     "events/${event.id}/attendees/$uid/fullName" to fullName,
                     "events/${event.id}/attendees/$uid/profileImageUrl" to profileImageUrl,
                     "events/${event.id}/attendeesCount" to ServerValue.increment(1)
                 )
+
                 database.reference.updateChildren(updates)
                     .addOnSuccessListener {
                         Toast.makeText(this, "You have successfully RSVP'd to \"${event.title}\"!", Toast.LENGTH_SHORT).show()
@@ -661,6 +733,9 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Show confirmation dialog before cancelling an event
+     */
     private fun showCancelEventDialog(event: Event) {
         AlertDialog.Builder(this)
             .setTitle("Cancel Event")
@@ -670,6 +745,9 @@ class ProfileActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Show confirmation dialog before cancelling RSVP
+     */
     private fun showCancelRsvpDialog(event: Event) {
         AlertDialog.Builder(this)
             .setTitle("Cancel RSVP")
@@ -679,6 +757,9 @@ class ProfileActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Delete an event from Firebase
+     */
     private fun deleteEvent(event: Event) {
         database.reference.child("events").child(event.id).removeValue()
             .addOnSuccessListener {
@@ -689,12 +770,16 @@ class ProfileActivity : AppCompatActivity() {
             }
     }
 
+    /**
+     * Cancel user's RSVP for an event
+     */
     private fun cancelRsvp(event: Event) {
         currentUserId?.let { uid ->
             val updates = hashMapOf<String, Any?>(
                 "events/${event.id}/attendees/$uid" to null,
                 "events/${event.id}/attendeesCount" to ServerValue.increment(-1)
             )
+
             database.reference.updateChildren(updates)
                 .addOnSuccessListener {
                     Toast.makeText(this, "RSVP cancelled", Toast.LENGTH_SHORT).show()
@@ -705,20 +790,51 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    private fun showCustomEventDetails(event: Event) {
+    /**
+     * Navigate to event editor for existing event
+     */
+    private fun navigateToEventEditor(event: Event) {
+        val intent = Intent(this, CreateEventActivity::class.java).apply {
+            putExtra("editMode", true)
+            putExtra("eventId", event.id)
+            putExtra("eventTitle", event.title)
+            event.dateTime?.seconds?.let { seconds ->
+                val date = Date(seconds * 1000)
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val timeFormat = SimpleDateFormat("HH:mm", Locale.US)
+                putExtra("eventDate", dateFormat.format(date))
+                putExtra("eventTime", timeFormat.format(date))
+            }
+            putExtra("eventLocation", event.location)
+            putExtra("eventDescription", event.description)
+            putExtra("eventImage", event.imageUrl)
+        }
+        startActivity(intent)
+    }
+
+    /**
+     * Display full event details in modal overlay
+     */
+    private fun showEventDetails(event: Event) {
         setMainContentInteraction(false)
-        val detailsView = LayoutInflater.from(this).inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
+        val detailsView = LayoutInflater.from(this)
+            .inflate(R.layout.dialog_event_details, binding.eventDetailsContainer, false)
         populateDetailsView(detailsView, event)
         binding.eventDetailsContainer.addView(detailsView)
         binding.darkScrim.visibility = View.VISIBLE
         animateDetailsIn(detailsView)
     }
 
+    /**
+     * Populate event details modal with event information
+     */
     private fun populateDetailsView(view: View, event: Event) {
         view.findViewById<TextView>(R.id.eventTitle).text = event.title
         view.findViewById<ImageView>(R.id.closeButton).setOnClickListener {
             animateDetailsOut(view)
         }
+
+        // Display event image if available
         val imageView = view.findViewById<ImageView>(R.id.eventImage)
         if (!event.imageUrl.isNullOrEmpty()) {
             imageView.visibility = View.VISIBLE
@@ -726,23 +842,28 @@ class ProfileActivity : AppCompatActivity() {
         } else {
             imageView.visibility = View.GONE
         }
+
+        // Populate event details
         view.findViewById<TextView>(R.id.dateTimeText).text = formatDateTime(event)
         view.findViewById<TextView>(R.id.locationText).text = event.location
         view.findViewById<TextView>(R.id.descriptionText).text = event.description
         view.findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
+
+        // Configure organizer section
         val organizerText = view.findViewById<TextView>(R.id.organizerText)
         val organizerClickableSection = view.findViewById<LinearLayout>(R.id.organizerClickableSection)
         val organizerHintText = view.findViewById<TextView>(R.id.organizerHintText)
         val organizerArrow = view.findViewById<ImageView>(R.id.organizerArrow)
         val organizerName = event.organizer?.fullName ?: "Unknown"
+
         organizerText.text = organizerName
         val organizerUid = event.organizer?.uid
+
+        // Configure organizer profile navigation
         if (organizerUid != null && organizerUid != currentUserId) {
             organizerClickableSection.setOnClickListener {
-                Log.d(TAG, "Opening profile for organizer: $organizerName ($organizerUid)")
                 animateDetailsOut(view)
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    // --- FIX: Correctly call PublicProfileActivity.newIntent ---
                     val intent = PublicProfileActivity.newIntent(this@ProfileActivity, organizerUid, organizerName)
                     startActivity(intent)
                 }, 300)
@@ -752,6 +873,7 @@ class ProfileActivity : AppCompatActivity() {
             organizerHintText.visibility = View.VISIBLE
             organizerArrow.visibility = View.VISIBLE
         } else {
+            // Current user is the organizer
             organizerClickableSection.setOnClickListener(null)
             organizerClickableSection.isClickable = false
             organizerClickableSection.isFocusable = false
@@ -765,29 +887,43 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Animate event details modal entrance
+     */
     private fun animateDetailsIn(detailsView: View) {
         binding.eventDetailsContainer.visibility = View.VISIBLE
+
+        // Background scrim fade in
         val scrimFadeIn = ObjectAnimator.ofFloat(binding.darkScrim, "alpha", 1f)
         scrimFadeIn.duration = 400
+
+        // Modal card animation
         detailsView.alpha = 0f
         detailsView.scaleX = 0.8f
         detailsView.scaleY = 0.8f
+
         val cardFadeIn = ObjectAnimator.ofFloat(detailsView, "alpha", 1f)
         val cardScaleX = ObjectAnimator.ofFloat(detailsView, "scaleX", 1f)
         val cardScaleY = ObjectAnimator.ofFloat(detailsView, "scaleY", 1f)
+
         val cardAnimatorSet = AnimatorSet()
         cardAnimatorSet.playTogether(cardFadeIn, cardScaleX, cardScaleY)
         cardAnimatorSet.interpolator = OvershootInterpolator(1.1f)
         cardAnimatorSet.duration = 500
+
+        // Content staggered animation
         val contentContainer = detailsView.findViewById<ViewGroup>(R.id.contentContainer)
         val contentAnimators = AnimatorSet()
         val animators = mutableListOf<Animator>()
+
         for (i in 0 until contentContainer.childCount) {
             val child = contentContainer.getChildAt(i)
             child.alpha = 0f
             child.translationY = 80f
+
             val childFade = ObjectAnimator.ofFloat(child, "alpha", 1f)
             val childSlide = ObjectAnimator.ofFloat(child, "translationY", 0f)
+
             val childSet = AnimatorSet()
             childSet.playTogether(childFade, childSlide)
             childSet.duration = 400
@@ -796,20 +932,27 @@ class ProfileActivity : AppCompatActivity() {
             animators.add(childSet)
         }
         contentAnimators.playTogether(animators)
+
         val finalAnimatorSet = AnimatorSet()
         finalAnimatorSet.play(scrimFadeIn).with(cardAnimatorSet).before(contentAnimators)
         finalAnimatorSet.start()
     }
 
+    /**
+     * Animate event details modal exit
+     */
     private fun animateDetailsOut(detailsView: View) {
         val scrimFadeOut = ObjectAnimator.ofFloat(binding.darkScrim, "alpha", 0f)
         scrimFadeOut.duration = 300
+
         val cardFadeOut = ObjectAnimator.ofFloat(detailsView, "alpha", 0f)
         val cardSlideDown = ObjectAnimator.ofFloat(detailsView, "translationY", 100f)
+
         val cardAnimatorSet = AnimatorSet()
         cardAnimatorSet.playTogether(cardFadeOut, cardSlideDown)
         cardAnimatorSet.interpolator = DecelerateInterpolator()
         cardAnimatorSet.duration = 300
+
         val finalAnimatorSet = AnimatorSet()
         finalAnimatorSet.playTogether(scrimFadeOut, cardAnimatorSet)
         finalAnimatorSet.addListener(object : AnimatorListenerAdapter() {
@@ -823,6 +966,9 @@ class ProfileActivity : AppCompatActivity() {
         finalAnimatorSet.start()
     }
 
+    /**
+     * Control main content interaction during modal display
+     */
     private fun setMainContentInteraction(enabled: Boolean) {
         fun setViewAndChildrenEnabled(view: View, enabled: Boolean) {
             view.isEnabled = enabled
@@ -837,6 +983,9 @@ class ProfileActivity : AppCompatActivity() {
         setViewAndChildrenEnabled(mainContent, enabled)
     }
 
+    /**
+     * Format event datetime for display
+     */
     private fun formatDateTime(event: Event): String {
         event.dateTime?.seconds?.let {
             val date = Date(it * 1000)
@@ -846,6 +995,9 @@ class ProfileActivity : AppCompatActivity() {
         return "Date and time not specified"
     }
 
+    /**
+     * Clean up listeners when activity is destroyed
+     */
     override fun onDestroy() {
         super.onDestroy()
         userProfileRef?.removeEventListener(userProfileListener!!)

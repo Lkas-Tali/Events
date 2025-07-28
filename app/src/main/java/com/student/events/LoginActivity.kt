@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.text.InputType
-import android.util.Log
 import android.util.Patterns
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -22,15 +21,16 @@ import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import com.student.events.services.AuthStateManager
 
+/**
+ * LoginActivity handles user authentication and session management.
+ * Features secure login with Firebase Auth and persistent session storage.
+ */
 class LoginActivity : AppCompatActivity() {
 
-    // Declare a variable for the Firebase Authentication service.
     private lateinit var auth: FirebaseAuth
-
-    // NEW: Session management
     private lateinit var sessionPrefs: SharedPreferences
 
-    // Declare variables for all the UI elements we will interact with.
+    // UI Components
     private lateinit var emailEditText: TextInputEditText
     private lateinit var passwordEditText: TextInputEditText
     private lateinit var loginButton: Button
@@ -39,7 +39,6 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var signupLayout: LinearLayout
 
     companion object {
-        private const val TAG = "LoginActivity"
         private const val PREFS_NAME = "EventsAppSession"
         private const val KEY_USER_LOGGED_IN = "user_logged_in"
         private const val KEY_USER_ID = "user_id"
@@ -50,29 +49,42 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
-        // Enable edge-to-edge display
+        // Configure edge-to-edge display
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        // Programmatically control the system bar appearance
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = true
         insetsController.isAppearanceLightNavigationBars = true
 
-        // Initialize the FirebaseAuth instance and session preferences
+        // Initialize Firebase and session management
         auth = Firebase.auth
         sessionPrefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
 
-        Log.d(TAG, "LoginActivity created")
+        initializeViews()
+        setupInputHandlers()
+        setupClickListeners()
+    }
 
-        // Get references to UI elements
+    /**
+     * Initialize all UI components
+     */
+    private fun initializeViews() {
         emailEditText = findViewById(R.id.emailEditText)
         passwordEditText = findViewById(R.id.passwordEditText)
         loginButton = findViewById(R.id.loginButton)
         progressBar = findViewById(R.id.progressBar)
         forgotPasswordTextView = findViewById(R.id.forgotPasswordTextView)
         signupLayout = findViewById(R.id.signupLayout)
+    }
 
-        // --- ROBUST KEYBOARD FIX ---
+    /**
+     * Setup input field behavior and keyboard handling
+     */
+    private fun setupInputHandlers() {
+        // Configure input types for better user experience
+        emailEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        passwordEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+
+        // Enhanced keyboard management
         val focusListener = View.OnFocusChangeListener { view, hasFocus ->
             if (hasFocus) {
                 showKeyboard(view)
@@ -80,32 +92,28 @@ class LoginActivity : AppCompatActivity() {
         }
         emailEditText.onFocusChangeListener = focusListener
         passwordEditText.onFocusChangeListener = focusListener
-
-        // Set up click listeners
-        loginButton.setOnClickListener {
-            performLogin()
-        }
-
-        forgotPasswordTextView.setOnClickListener {
-            val intent = Intent(this, ForgotPasswordActivity::class.java)
-            startActivity(intent)
-        }
-
-        signupLayout.setOnClickListener {
-            val intent = Intent(this, SignUpActivity::class.java)
-            startActivity(intent)
-        }
-        emailEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-        passwordEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
     }
 
     /**
-     * Enhanced onStart method with comprehensive authentication checking
+     * Setup click listeners for all interactive elements
+     */
+    private fun setupClickListeners() {
+        loginButton.setOnClickListener { performLogin() }
+
+        forgotPasswordTextView.setOnClickListener {
+            startActivity(Intent(this, ForgotPasswordActivity::class.java))
+        }
+
+        signupLayout.setOnClickListener {
+            startActivity(Intent(this, SignUpActivity::class.java))
+        }
+    }
+
+    /**
+     * Check for existing authentication when activity starts
      */
     public override fun onStart() {
         super.onStart()
-
-        Log.d(TAG, "onStart - Checking existing authentication")
 
         val currentUser = auth.currentUser
         val sessionUserId = sessionPrefs.getString(KEY_USER_ID, null)
@@ -113,62 +121,41 @@ class LoginActivity : AppCompatActivity() {
         val lastLoginTime = sessionPrefs.getLong(KEY_LAST_LOGIN_TIME, 0)
         val currentTime = System.currentTimeMillis()
 
-        Log.d(TAG, "Firebase user: ${currentUser?.uid}")
-        Log.d(TAG, "Session user: $sessionUserId")
-        Log.d(TAG, "Session valid: $isSessionValid")
-        Log.d(TAG, "Time since last login: ${(currentTime - lastLoginTime) / 1000}s")
-
         when {
-            // Case 1: Firebase user exists and session is valid
+            // Valid Firebase user with matching session
             currentUser != null && isSessionValid && currentUser.uid == sessionUserId -> {
-                Log.d(TAG, "✅ Valid authentication found - navigating to main")
                 updateSessionData(currentUser.uid)
                 navigateToMain()
             }
 
-            // Case 2: Firebase user exists but session is missing/invalid - restore session
+            // Firebase user exists but session needs restoration
             currentUser != null -> {
-                Log.d(TAG, "✅ Firebase user found, restoring session")
                 updateSessionData(currentUser.uid)
                 navigateToMain()
             }
 
-            // Case 3: No Firebase user but valid recent session - attempt restore
+            // Session exists but Firebase user is missing - check if recent
             currentUser == null && isSessionValid && sessionUserId != null &&
-                    (currentTime - lastLoginTime) < 7 * 24 * 60 * 60 * 1000L -> { // 7 days
-                Log.d(TAG, "⚠️ Firebase user missing but recent session exists - attempting silent login")
-                // For this case, we'll stay on login screen but could attempt silent re-auth
-                // This is safer than automatically logging in without Firebase confirmation
-                showSessionRestoreOption(sessionUserId)
+                    (currentTime - lastLoginTime) < 7 * 24 * 60 * 60 * 1000L -> {
+                // Session exists but older than 7 days, clear it
+                clearSessionData()
             }
 
-            // Case 4: No valid authentication
+            // No valid authentication found
             else -> {
-                Log.d(TAG, "ℹ️ No valid authentication - staying on login screen")
                 clearSessionData()
-                // Stay on login screen
             }
         }
     }
 
     /**
-     * NEW: Show option to restore previous session
-     */
-    private fun showSessionRestoreOption(userId: String) {
-        // Could show a "Restore previous session?" dialog
-        // For now, we'll just clear the invalid session
-        Log.d(TAG, "Clearing invalid session for user: $userId")
-        clearSessionData()
-    }
-
-    /**
-     * Enhanced login with session management
+     * Perform user login with input validation and Firebase authentication
      */
     private fun performLogin() {
         val email = emailEditText.text.toString().trim()
         val password = passwordEditText.text.toString().trim()
 
-        // Input validation
+        // Validate email input
         if (email.isEmpty()) {
             emailEditText.error = "Email address is required."
             emailEditText.requestFocus()
@@ -181,6 +168,7 @@ class LoginActivity : AppCompatActivity() {
             return
         }
 
+        // Validate password input
         if (password.isEmpty()) {
             passwordEditText.error = "Password is required."
             passwordEditText.requestFocus()
@@ -188,39 +176,33 @@ class LoginActivity : AppCompatActivity() {
         }
 
         // Show loading state
-        progressBar.visibility = View.VISIBLE
-        loginButton.isEnabled = false
+        setLoadingState(true)
 
-        Log.d(TAG, "Attempting login for: $email")
-
+        // Attempt Firebase authentication
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener(this) { task ->
-                progressBar.visibility = View.GONE
-                loginButton.isEnabled = true
+                setLoadingState(false)
+
                 if (task.isSuccessful) {
                     val user = auth.currentUser
                     if (user != null) {
-                        // Use AuthStateManager to save session
+                        // Save session using AuthStateManager
                         val authStateManager = AuthStateManager.getInstance(this)
                         authStateManager.saveSession(user.uid, user.email)
 
-                        Toast.makeText(baseContext, "Login Successful.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Login Successful.", Toast.LENGTH_SHORT).show()
                         navigateToMain()
                     }
-                }
-                else {
-                    val errorMessage = task.exception?.message ?: "Unknown error"
-                    Log.e(TAG, "Login failed: $errorMessage")
-                    Toast.makeText(baseContext, "Authentication failed: $errorMessage", Toast.LENGTH_LONG).show()
-
-                    // Clear any existing session data on failed login
+                } else {
+                    val errorMessage = task.exception?.message ?: "Authentication failed"
+                    Toast.makeText(this, "Authentication failed: $errorMessage", Toast.LENGTH_LONG).show()
                     clearSessionData()
                 }
             }
     }
 
     /**
-     * NEW: Update session data when user logs in
+     * Update local session data for persistent login
      */
     private fun updateSessionData(userId: String) {
         sessionPrefs.edit().apply {
@@ -229,19 +211,25 @@ class LoginActivity : AppCompatActivity() {
             putLong(KEY_LAST_LOGIN_TIME, System.currentTimeMillis())
             apply()
         }
-        Log.d(TAG, "Session data saved for user: $userId")
     }
 
     /**
-     * NEW: Clear session data
+     * Clear all session data
      */
     private fun clearSessionData() {
         sessionPrefs.edit().clear().apply()
-        Log.d(TAG, "Session data cleared")
     }
 
     /**
-     * Helper function to explicitly show the soft keyboard for a given View.
+     * Show or hide loading indicators
+     */
+    private fun setLoadingState(isLoading: Boolean) {
+        progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+        loginButton.isEnabled = !isLoading
+    }
+
+    /**
+     * Show soft keyboard for the specified view
      */
     private fun showKeyboard(view: View) {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -249,20 +237,17 @@ class LoginActivity : AppCompatActivity() {
     }
 
     /**
-     * Enhanced navigation to MainActivity with proper session setup
+     * Navigate to MainActivity and clear the activity stack
      */
     private fun navigateToMain() {
-        Log.d(TAG, "Navigating to MainActivity")
-
         val intent = Intent(this, MainActivity::class.java)
-        // Clear the back stack so user can't return to login by pressing back
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         startActivity(intent)
         finish()
     }
 
     /**
-     * NEW: Handle back button to prevent session issues
+     * Handle back button press to maintain clean session state
      */
     override fun onBackPressed() {
         // Clear any partial session data if user backs out
@@ -270,18 +255,5 @@ class LoginActivity : AppCompatActivity() {
             clearSessionData()
         }
         super.onBackPressed()
-    }
-
-    /**
-     * NEW: Clear session data if activity is destroyed without successful login
-     */
-    override fun onDestroy() {
-        super.onDestroy()
-
-        // If we're destroying without a successful login and there's no Firebase user,
-        // make sure we don't have stale session data
-        if (auth.currentUser == null && !isFinishing) {
-            Log.d(TAG, "Activity destroyed without valid user - ensuring clean session state")
-        }
     }
 }

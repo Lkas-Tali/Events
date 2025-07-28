@@ -1,68 +1,94 @@
 package com.student.events.services
 
-import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.student.events.util.NotificationUtils
 
+/**
+ * MyFirebaseMessagingService handles Firebase Cloud Messaging (FCM) for push notifications.
+ * Manages FCM token updates and processes incoming notification messages.
+ */
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
-    companion object {
-        private const val TAG = "MyFirebaseMsgService"
-    }
-
     /**
-     * Called when a new FCM registration token is generated.
-     * This is where you should save the token to your server/database.
+     * Called when FCM registration token is updated.
+     * This occurs when the app is restored on a new device, app is backed up and restored,
+     * or when app data is cleared.
      */
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "Refreshed token: $token")
-        sendTokenToDatabase(token)
+
+        // Save the new token to the database for this user
+        saveTokenToDatabase(token)
     }
 
     /**
-     * Called when a message is received.
+     * Called when a message is received from Firebase Cloud Messaging.
+     * Processes the message and displays appropriate notifications to the user.
      *
-     * @param remoteMessage Object representing the message received from Firebase Cloud Messaging.
+     * @param remoteMessage Object representing the message received from FCM
      */
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
-        Log.d(TAG, "From: ${remoteMessage.from}")
 
-        // Check if message contains a data payload.
-        remoteMessage.data.isNotEmpty().let {
-            Log.d(TAG, "Message data payload: " + remoteMessage.data)
+        // Process data payload if present
+        if (remoteMessage.data.isNotEmpty()) {
+            handleDataMessage(remoteMessage.data)
+        }
 
-            // Extract title and body from the data payload
-            val title = remoteMessage.data["title"]
-            val body = remoteMessage.data["body"]
-            val eventId = remoteMessage.data["eventId"]
-
-            if (!title.isNullOrBlank() && !body.isNullOrBlank()) {
-                NotificationUtils.showNotification(this, title, body, eventId)
-            }
+        // Process notification payload if present
+        remoteMessage.notification?.let { notification ->
+            handleNotificationMessage(
+                title = notification.title ?: "Events App",
+                body = notification.body ?: "",
+                eventId = remoteMessage.data["eventId"]
+            )
         }
     }
 
     /**
-     * Persist token to the real-time database.
-     * This allows you to send notifications to this specific device.
+     * Handle data-only messages from FCM
+     * These messages contain custom data fields but no notification payload
      */
-    private fun sendTokenToDatabase(token: String) {
+    private fun handleDataMessage(data: Map<String, String>) {
+        val title = data["title"]
+        val body = data["body"]
+        val eventId = data["eventId"]
+
+        if (!title.isNullOrBlank() && !body.isNullOrBlank()) {
+            NotificationUtils.showNotification(this, title, body, eventId)
+        }
+    }
+
+    /**
+     * Handle notification messages from FCM
+     * These messages contain a notification payload that may be automatically displayed
+     */
+    private fun handleNotificationMessage(title: String, body: String, eventId: String?) {
+        // Create custom notification to ensure consistent handling across app states
+        NotificationUtils.showNotification(this, title, body, eventId)
+    }
+
+    /**
+     * Save the FCM token to the user's profile in Firebase Realtime Database.
+     * This allows the server to send targeted notifications to this specific device.
+     */
+    private fun saveTokenToDatabase(token: String) {
         val userId = FirebaseAuth.getInstance().currentUser?.uid
+
         if (userId != null) {
             FirebaseDatabase.getInstance().getReference("users")
                 .child(userId)
                 .child("fcmToken")
                 .setValue(token)
                 .addOnSuccessListener {
-                    Log.d(TAG, "FCM token successfully updated for user: $userId")
+                    // Token successfully updated
                 }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Failed to update FCM token for user: $userId", e)
+                .addOnFailureListener {
+                    // Handle token update failure silently
+                    // The token will be retried on next app launch
                 }
         }
     }

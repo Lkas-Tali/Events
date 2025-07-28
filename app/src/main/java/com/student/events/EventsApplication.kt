@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
-import android.util.Log
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.OnLifecycleEvent
@@ -13,29 +12,38 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.student.events.services.AuthenticationService
-import com.student.events.util.NotificationUtils // Import NotificationUtils
+import com.student.events.util.NotificationUtils
 import kotlinx.coroutines.*
 
+/**
+ * Main Application class responsible for global app initialization and lifecycle management.
+ * Handles Firebase setup, user session persistence, authentication state management,
+ * and device-specific optimizations for better performance and reliability.
+ */
 class EventsApplication : Application(), LifecycleObserver {
 
     private lateinit var sessionPrefs: SharedPreferences
     private val applicationScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     companion object {
-        private const val TAG = "EventsApplication"
         private const val PREFS_NAME = "EventsAppSession"
         private const val KEY_USER_LOGGED_IN = "user_logged_in"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_LAST_LOGIN_TIME = "last_login_time"
         private const val KEY_APP_BACKGROUND_TIME = "app_background_time"
 
-        // Keep session valid for 30 days
+        // Session validity period (30 days)
         private const val SESSION_VALIDITY_DAYS = 30L
         private const val SESSION_VALIDITY_MS = SESSION_VALIDITY_DAYS * 24 * 60 * 60 * 1000L
 
         @Volatile
         private var INSTANCE: EventsApplication? = null
 
+        /**
+         * Get the singleton instance of the application
+         * @return The application instance
+         * @throws IllegalStateException if application is not initialized
+         */
         fun getInstance(): EventsApplication {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: throw IllegalStateException("Application not initialized")
@@ -47,90 +55,97 @@ class EventsApplication : Application(), LifecycleObserver {
         super.onCreate()
         INSTANCE = this
 
-        Log.d(TAG, "Application starting...")
+        initializeCore()
+        setupLifecycleMonitoring()
+        initializeServices()
+        setupCrashProtection()
+        applyDeviceOptimizations()
+    }
 
-        // Create Notification Channel
+    /**
+     * Initialize core application components
+     */
+    private fun initializeCore() {
+        // Setup notification channels for the app
         NotificationUtils.createNotificationChannel(this)
 
-        // Initialize SharedPreferences
+        // Initialize session management
         sessionPrefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
 
-        // Initialize Firebase with enhanced configuration
+        // Initialize Firebase services
         initializeFirebase()
+    }
 
-        // Setup lifecycle observer
+    /**
+     * Setup application lifecycle monitoring
+     */
+    private fun setupLifecycleMonitoring() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
+    }
 
-        // Start authentication service if user is logged in
+    /**
+     * Initialize background services if user is authenticated
+     */
+    private fun initializeServices() {
         if (isUserLoggedIn()) {
             AuthenticationService.startService(this)
         }
-
-        // Setup crash handler to preserve session
-        setupCrashHandler()
-
-        // Handle device-specific optimizations
-        handleDeviceSpecificOptimizations()
-
-        Log.d(TAG, "Application initialization complete")
     }
 
+    /**
+     * Initialize Firebase services with proper configuration
+     */
     private fun initializeFirebase() {
         try {
+            // Initialize Firebase if not already done
             if (FirebaseApp.getApps(this).isEmpty()) {
                 FirebaseApp.initializeApp(this)
-                Log.d(TAG, "Firebase initialized")
             }
 
-            // Configure Firebase Auth settings
+            // Configure Firebase Auth
             val auth = FirebaseAuth.getInstance()
             auth.setLanguageCode("en")
 
-            // Add auth state listener for monitoring
+            // Setup global authentication state monitoring
             auth.addAuthStateListener { firebaseAuth ->
                 val user = firebaseAuth.currentUser
-                Log.d(TAG, "Global auth state changed: ${user?.uid}")
 
                 if (user != null) {
-                    // Update session when auth state changes
                     updateSessionData(user.uid)
-
-                    // Ensure authentication service is running
                     AuthenticationService.startService(this)
                 }
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Firebase initialization error: ${e.message}")
+            // Handle Firebase initialization errors gracefully
         }
     }
 
-    private fun setupCrashHandler() {
+    /**
+     * Setup crash protection to preserve user sessions
+     */
+    private fun setupCrashProtection() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
 
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            Log.e(TAG, "Uncaught exception: ${throwable.message}")
-
             // Preserve session data before crash
             preserveSessionOnCrash()
 
-            // Call default handler
+            // Delegate to default handler
             defaultHandler?.uncaughtException(thread, throwable)
         }
     }
 
-    private fun handleDeviceSpecificOptimizations() {
+    /**
+     * Apply device-specific optimizations for better performance
+     */
+    private fun applyDeviceOptimizations() {
         val manufacturer = Build.MANUFACTURER.lowercase()
-        val model = Build.MODEL.lowercase()
 
-        Log.d(TAG, "Device: $manufacturer $model")
-
-        // Samsung-specific optimizations
+        // Apply Samsung-specific optimizations for better session persistence
         if (manufacturer.contains("samsung")) {
-            Log.d(TAG, "Applying Samsung device optimizations")
-
-            // Samsung devices (especially S21 series) have aggressive memory management
-            // Enable more frequent session updates
+            // Samsung devices have aggressive memory management
+            // Implement more frequent session refresh to prevent data loss
             applicationScope.launch {
                 while (isActive) {
                     delay(5 * 60 * 1000L) // Every 5 minutes
@@ -142,57 +157,60 @@ class EventsApplication : Application(), LifecycleObserver {
         }
     }
 
+    /**
+     * Called when app comes to foreground
+     */
     @OnLifecycleEvent(Lifecycle.Event.ON_START)
     fun onAppForegrounded() {
-        Log.d(TAG, "App foregrounded")
-
         val backgroundTime = sessionPrefs.getLong(KEY_APP_BACKGROUND_TIME, 0L)
         val currentTime = System.currentTimeMillis()
-        val timeInBackground = currentTime - backgroundTime
 
-        Log.d(TAG, "Time in background: ${timeInBackground / 1000}s")
-
-        // Check and restore session if needed
+        // Restore session and services if user is logged in
         if (isUserLoggedIn()) {
             checkAndRestoreSession()
-
-            // Restart authentication service
             AuthenticationService.startService(this)
         }
     }
 
+    /**
+     * Called when app goes to background
+     */
     @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
     fun onAppBackgrounded() {
-        Log.d(TAG, "App backgrounded")
-
-        // Save background time
+        // Save background timestamp for session management
         sessionPrefs.edit().apply {
             putLong(KEY_APP_BACKGROUND_TIME, System.currentTimeMillis())
             apply()
         }
 
-        // Ensure session is persisted
+        // Ensure session data is persisted
         if (isUserLoggedIn()) {
             refreshSession()
         }
     }
 
+    /**
+     * Check if user has a valid login session
+     * @return true if user is logged in with valid session, false otherwise
+     */
     fun isUserLoggedIn(): Boolean {
         val isLoggedIn = sessionPrefs.getBoolean(KEY_USER_LOGGED_IN, false)
         val userId = sessionPrefs.getString(KEY_USER_ID, null)
         val lastLoginTime = sessionPrefs.getLong(KEY_LAST_LOGIN_TIME, 0L)
         val currentTime = System.currentTimeMillis()
 
-        // Check if session is still valid (within 30 days)
+        // Validate session within time limit
         val isSessionValid = isLoggedIn &&
                 !userId.isNullOrEmpty() &&
                 (currentTime - lastLoginTime) < SESSION_VALIDITY_MS
 
-        Log.d(TAG, "Session check - Valid: $isSessionValid, UserId: $userId")
-
         return isSessionValid
     }
 
+    /**
+     * Get current user ID if logged in
+     * @return User ID string or null if not logged in
+     */
     fun getUserId(): String? {
         return if (isUserLoggedIn()) {
             sessionPrefs.getString(KEY_USER_ID, null)
@@ -201,40 +219,41 @@ class EventsApplication : Application(), LifecycleObserver {
         }
     }
 
+    /**
+     * Check and restore user session, handling Firebase auth state mismatches
+     */
     private fun checkAndRestoreSession() {
         val auth = FirebaseAuth.getInstance()
         val currentUser = auth.currentUser
         val sessionUserId = sessionPrefs.getString(KEY_USER_ID, null)
 
-        Log.d(TAG, "Checking session - Firebase: ${currentUser?.uid}, Session: $sessionUserId")
-
         when {
-            // Both valid - refresh session
+            // Both Firebase and session are valid and match
             currentUser != null && sessionUserId == currentUser.uid -> {
-                Log.d(TAG, "✅ Session valid and matches Firebase")
                 refreshSession()
             }
 
-            // Firebase user exists but different from session - update session
+            // Firebase user exists but differs from session - update session
             currentUser != null && sessionUserId != currentUser.uid -> {
-                Log.d(TAG, "⚠️ Session mismatch - updating to Firebase user")
                 updateSessionData(currentUser.uid)
             }
 
-            // No Firebase user but valid session - keep session
+            // No Firebase user but valid session exists - preserve session
+            // This handles cases where Firebase auth might be temporarily unavailable
             currentUser == null && !sessionUserId.isNullOrEmpty() -> {
-                Log.w(TAG, "⚠️ Firebase user null but session exists - preserving session")
-                // Don't clear session - Firebase might restore
+                // Keep existing session - Firebase might restore on its own
             }
 
-            // No valid auth
+            // No valid authentication available
             else -> {
-                Log.d(TAG, "❌ No valid authentication")
                 clearSession()
             }
         }
     }
 
+    /**
+     * Refresh current session timestamp to extend validity
+     */
     private fun refreshSession() {
         val userId = sessionPrefs.getString(KEY_USER_ID, null)
         if (!userId.isNullOrEmpty()) {
@@ -242,10 +261,13 @@ class EventsApplication : Application(), LifecycleObserver {
                 putLong(KEY_LAST_LOGIN_TIME, System.currentTimeMillis())
                 apply()
             }
-            Log.d(TAG, "Session refreshed for user: $userId")
         }
     }
 
+    /**
+     * Update session data with new user information
+     * @param userId The user ID to store in session
+     */
     fun updateSessionData(userId: String) {
         sessionPrefs.edit().apply {
             putBoolean(KEY_USER_LOGGED_IN, true)
@@ -253,28 +275,28 @@ class EventsApplication : Application(), LifecycleObserver {
             putLong(KEY_LAST_LOGIN_TIME, System.currentTimeMillis())
             apply()
         }
-        Log.d(TAG, "Session data updated for user: $userId")
 
-        // Start authentication service
+        // Start authentication service for session maintenance
         AuthenticationService.startService(this)
     }
 
+    /**
+     * Clear all session data and stop authentication services
+     */
     fun clearSession() {
         sessionPrefs.edit().clear().apply()
-        Log.d(TAG, "Session cleared")
-
-        // Stop authentication service
         AuthenticationService.stopService(this)
     }
 
-
+    /**
+     * Preserve session data to disk before app crash
+     */
     private fun preserveSessionOnCrash() {
         try {
-            // Force sync SharedPreferences to disk
+            // Force synchronous write to ensure data is saved
             sessionPrefs.edit().commit()
-            Log.d(TAG, "Session preserved before crash")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to preserve session: ${e.message}")
+            // Handle preservation errors silently
         }
     }
 

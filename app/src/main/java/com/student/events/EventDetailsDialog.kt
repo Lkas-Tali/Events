@@ -17,48 +17,72 @@ import com.student.events.models.Event
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * Modal dialog for displaying detailed event information.
+ * Features a blurred background effect on supported Android versions
+ * and provides a focused view of event details including image,
+ * date/time, location, description, and attendee information.
+ */
 class EventDetailsDialog(
     context: Context,
     private val event: Event
-    // FIX: The style is changed to the new BlurredDialog style
 ) : Dialog(context, R.style.BlurredDialog) {
 
-    // Get the current user ID to check against the organizer
     private val currentUserId: String? = FirebaseAuth.getInstance().currentUser?.uid
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // The requestWindowFeature call is no longer needed with the new style
         setContentView(R.layout.dialog_event_details)
 
-        // FIX: The window is now configured for the blur and pop-up effect
-        window?.let {
-            // Set the layout to wrap the content, making it a pop-up
-            it.setLayout(
+        configureDialogWindow()
+        setupEventContent()
+    }
+
+    /**
+     * Configure dialog window properties for modern material design appearance
+     * with blur effects and proper sizing
+     */
+    private fun configureDialogWindow() {
+        window?.let { dialogWindow ->
+            // Configure dialog as centered popup with content-based sizing
+            dialogWindow.setLayout(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT
             )
-            // Make the dialog's window background fully transparent
-            it.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
-            // Apply blur to the background window (the activity) on Android 12+
+            // Remove default dialog background for custom styling
+            dialogWindow.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+            // Apply background blur effect on Android 12+ for enhanced visual depth
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                it.setBackgroundBlurRadius(60)
+                dialogWindow.setBackgroundBlurRadius(60)
             }
 
-            // Dim the background to make the pop-up more prominent
-            it.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            it.attributes.dimAmount = 0.5f
+            // Add subtle background dimming to focus attention on dialog content
+            dialogWindow.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            dialogWindow.attributes.dimAmount = 0.5f
         }
-
-        setupViews()
     }
 
-    private fun setupViews() {
+    /**
+     * Populate dialog with event information and configure UI elements
+     */
+    private fun setupEventContent() {
+        // Set event title and close button functionality
         findViewById<TextView>(R.id.eventTitle).text = event.title
         findViewById<ImageView>(R.id.closeButton).setOnClickListener { dismiss() }
 
+        configureEventImage()
+        populateEventDetails()
+        configureOrganizerDisplay()
+    }
+
+    /**
+     * Load and display event image if available, hide image view if no image exists
+     */
+    private fun configureEventImage() {
         val imageView = findViewById<ImageView>(R.id.eventImage)
+
         if (!event.imageUrl.isNullOrEmpty()) {
             imageView.visibility = View.VISIBLE
             Glide.with(context)
@@ -70,30 +94,42 @@ class EventDetailsDialog(
         } else {
             imageView.visibility = View.GONE
         }
+    }
 
+    /**
+     * Fill in event details including date/time, location, description, and attendee count
+     */
+    private fun populateEventDetails() {
         findViewById<TextView>(R.id.dateTimeText).text = formatDateTime(event)
         findViewById<TextView>(R.id.locationText).text = event.location
         findViewById<TextView>(R.id.descriptionText).text = event.description
         findViewById<TextView>(R.id.attendeesText).text = "${event.attendeesCount} people attending"
+    }
 
-        // --- FIX STARTS HERE ---
-        // Add logic to check if the current user is the organizer.
+    /**
+     * Configure organizer name display with special styling for current user
+     */
+    private fun configureOrganizerDisplay() {
         val organizerText = findViewById<TextView>(R.id.organizerText)
         val organizerName = event.organizer?.fullName ?: "Unknown"
         val organizerUid = event.organizer?.uid
 
         if (organizerUid != null && organizerUid == currentUserId) {
-            // If the current user is the organizer, append "(You)" and change color.
+            // Current user is the organizer - add "(You)" indicator and use secondary text color
             organizerText.text = "$organizerName (You)"
             organizerText.setTextColor(context.resources.getColor(R.color.app_text_secondary, null))
         } else {
-            // Otherwise, just show the name with the default color.
+            // Different organizer - show name with standard text color
             organizerText.text = organizerName
             organizerText.setTextColor(context.resources.getColor(R.color.app_text_primary, null))
         }
-        // --- FIX ENDS HERE ---
     }
 
+    /**
+     * Format event date and time for user-friendly display
+     * @param event The event containing date/time information
+     * @return Formatted date/time string or fallback message
+     */
     private fun formatDateTime(event: Event): String {
         event.dateTime?.seconds?.let {
             val date = Date(it * 1000)
