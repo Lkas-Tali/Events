@@ -1,11 +1,14 @@
 package com.student.events
 
+import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -19,8 +22,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -100,6 +105,13 @@ class MainActivity : AppCompatActivity() {
     private var notificationsListener: ValueEventListener? = null
     private var notificationsQuery: Query? = null
 
+    // Notification permission launcher for Android 13+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        handleNotificationPermissionResult(isGranted)
+    }
+
     companion object {
         private const val CREATE_EVENT_REQUEST = 1001
         private const val EDIT_EVENT_REQUEST = 1002
@@ -107,6 +119,7 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_USER_LOGGED_IN = "user_logged_in"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_LAST_LOGIN_TIME = "last_login_time"
+        private const val KEY_NOTIFICATION_PERMISSION_REQUESTED = "notification_permission_requested"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -141,11 +154,83 @@ class MainActivity : AppCompatActivity() {
 
         setupAuthenticationMonitoring()
         initializeDataListeners()
+
+        // Request notification permissions after UI setup
+        requestNotificationPermissionIfNeeded()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleNotificationIntent(intent)
+    }
+
+    /**
+     * Request notification permission for Android 13+ devices if not already requested
+     */
+    private fun requestNotificationPermissionIfNeeded() {
+        // Only request notification permission on Android 13+ (API 33+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+            val alreadyRequested = sessionPrefs.getBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, false)
+
+            if (!hasPermission && !alreadyRequested) {
+                // Show explanation dialog before requesting permission
+                showNotificationPermissionDialog()
+            }
+        }
+    }
+
+    /**
+     * Show dialog explaining notification permissions before requesting
+     */
+    private fun showNotificationPermissionDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Enable Notifications")
+            .setMessage("Stay updated with event invitations, RSVP confirmations, and important updates. You can change this anytime in settings.")
+            .setPositiveButton("Allow") { _, _ ->
+                requestNotificationPermission()
+            }
+            .setNegativeButton("Not Now") { _, _ ->
+                markNotificationPermissionRequested()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    /**
+     * Request notification permission from system
+     */
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            markNotificationPermissionRequested()
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    /**
+     * Handle the result of notification permission request
+     */
+    private fun handleNotificationPermissionResult(isGranted: Boolean) {
+        if (isGranted) {
+            // Permission granted - initialize Firebase messaging token
+            initializeFirebaseMessaging()
+        } else {
+            // Permission denied - app will still function but without push notifications
+            // Could show a subtle message about enabling notifications in settings
+        }
+    }
+
+    /**
+     * Mark that notification permission has been requested to avoid asking again
+     */
+    private fun markNotificationPermissionRequested() {
+        sessionPrefs.edit()
+            .putBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, true)
+            .apply()
     }
 
     /**
@@ -1119,13 +1204,30 @@ class MainActivity : AppCompatActivity() {
      * Delete event and associated image from storage
      */
     private fun deleteEvent(event: Event) {
-        if (!event.imageUrl.isNullOrEmpty()) {
-            val photoRef = FirebaseStorage.getInstance().getReferenceFromUrl(event.imageUrl)
-            photoRef.delete().addOnSuccessListener {
+        try {
+            if (!event.imageUrl.isNullOrEmpty()) {
+                // Attempt to delete the image from Firebase Storage
+                try {
+                    val photoRef = FirebaseStorage.getInstance().getReferenceFromUrl(event.imageUrl)
+                    photoRef.delete()
+                        .addOnSuccessListener {
+                            // Image deleted successfully, now delete the event
+                            deleteEventFromDatabase(event.id)
+                        }
+                        .addOnFailureListener {
+                            // Image deletion failed, but still delete the event
+                            deleteEventFromDatabase(event.id)
+                        }
+                } catch (e: Exception) {
+                    // URL parsing failed, proceed with event deletion anyway
+                    deleteEventFromDatabase(event.id)
+                }
+            } else {
+                // No image to delete, directly delete the event
                 deleteEventFromDatabase(event.id)
             }
-        } else {
-            deleteEventFromDatabase(event.id)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error deleting event", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1134,6 +1236,12 @@ class MainActivity : AppCompatActivity() {
      */
     private fun deleteEventFromDatabase(eventId: String) {
         database.reference.child("events").child(eventId).removeValue()
+            .addOnSuccessListener {
+                Toast.makeText(this, "Event deleted successfully", Toast.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener { error ->
+                Toast.makeText(this, "Failed to delete event: ${error.message}", Toast.LENGTH_LONG).show()
+            }
     }
 
     /**

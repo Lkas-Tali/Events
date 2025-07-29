@@ -18,7 +18,7 @@ import kotlinx.coroutines.*
 /**
  * Main Application class responsible for global app initialization and lifecycle management.
  * Handles Firebase setup, user session persistence, authentication state management,
- * and device-specific optimizations for better performance and reliability.
+ * notification system setup, and device-specific optimizations for better performance and reliability.
  */
 class EventsApplication : Application(), LifecycleObserver {
 
@@ -31,6 +31,7 @@ class EventsApplication : Application(), LifecycleObserver {
         private const val KEY_USER_ID = "user_id"
         private const val KEY_LAST_LOGIN_TIME = "last_login_time"
         private const val KEY_APP_BACKGROUND_TIME = "app_background_time"
+        private const val KEY_NOTIFICATION_PERMISSION_REQUESTED = "notification_permission_requested"
 
         // Session validity period (30 days)
         private const val SESSION_VALIDITY_DAYS = 30L
@@ -66,14 +67,44 @@ class EventsApplication : Application(), LifecycleObserver {
      * Initialize core application components
      */
     private fun initializeCore() {
-        // Setup notification channels for the app
-        NotificationUtils.createNotificationChannel(this)
+        // Setup notification channels early in app lifecycle
+        setupNotificationSystem()
 
         // Initialize session management
         sessionPrefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
 
         // Initialize Firebase services
         initializeFirebase()
+    }
+
+    /**
+     * Setup comprehensive notification system including channels and compatibility
+     */
+    private fun setupNotificationSystem() {
+        // Create notification channels for Android 8.0+ (API 26+)
+        NotificationUtils.createNotificationChannel(this)
+
+        // Prepare for notification permission handling on Android 13+ (API 33+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Notification permission will be requested in MainActivity
+            // This ensures proper timing after user authentication
+        }
+    }
+
+    /**
+     * Check if notification permission has been requested before
+     */
+    fun hasNotificationPermissionBeenRequested(): Boolean {
+        return sessionPrefs.getBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, false)
+    }
+
+    /**
+     * Mark that notification permission has been requested
+     */
+    fun markNotificationPermissionRequested() {
+        sessionPrefs.edit()
+            .putBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, true)
+            .apply()
     }
 
     /**
